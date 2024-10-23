@@ -1,4 +1,4 @@
-module comanda
+module github.com/kris-hansen/comanda
 
 go 1.22.6
 
