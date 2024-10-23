@@ -21,7 +21,7 @@ func DetectProvider(modelName string) Provider {
 	providers := []Provider{
 		NewAnthropicProvider(),
 		NewOpenAIProvider(),
-		// Add other providers here as needed
+		NewOllamaProvider(),
 	}
 
 	for _, provider := range providers {

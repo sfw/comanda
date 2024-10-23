@@ -233,6 +233,16 @@ func (p *Processor) configureProviders() error {
 			providerConfig, err = p.envConfig.GetProviderConfig("anthropic")
 		case "OpenAI":
 			providerConfig, err = p.envConfig.GetProviderConfig("openai")
+		case "Ollama":
+			providerConfig, err = p.envConfig.GetProviderConfig("ollama")
+			if err == nil {
+				// Ollama doesn't need an API key, so we can configure it directly
+				if err := provider.Configure(""); err != nil {
+					return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+				}
+				configuredProviders[providerName] = true
+				continue
+			}
 		default:
 			return fmt.Errorf("unknown provider for model: %s", modelName)
 		}
@@ -241,7 +251,7 @@ func (p *Processor) configureProviders() error {
 			return fmt.Errorf("failed to get config for provider %s: %w", providerName, err)
 		}
 
-		if providerConfig.APIKey == "" {
+		if providerName != "Ollama" && providerConfig.APIKey == "" {
 			return fmt.Errorf("missing API key for provider %s", providerName)
 		}
 
