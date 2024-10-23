@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"comanda/utils/config"
-	"comanda/utils/processor"
+	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/processor"
 )
 
 var processCmd = &cobra.Command{

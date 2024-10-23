@@ -1,8 +1,9 @@
 package processor
 
 import (
-	"comanda/utils/config"
 	"fmt"
+
+	"github.com/kris-hansen/comanda/utils/config"
 )
 
 // MockProvider implements the models.Provider interface for testing

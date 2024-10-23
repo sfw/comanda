@@ -1,6 +1,6 @@
 package main
 
-import "comanda/cmd"
+import "github.com/kris-hansen/comanda/cmd"
 
 func main() {
 	cmd.Execute()

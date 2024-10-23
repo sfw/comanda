@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"comanda/utils/config"
-	"comanda/utils/input"
-	"comanda/utils/models"
+	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/input"
+	"github.com/kris-hansen/comanda/utils/models"
 )
 
 // DSLConfig represents the structure of the DSL configuration
