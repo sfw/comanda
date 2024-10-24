@@ -7,6 +7,7 @@ COMandA is a command-line tool that enables the composition of Large Language Mo
 - 🔗 Chain multiple LLM operations together using simple YAML configuration
 - 🤖 Support for multiple LLM providers (OpenAI, Anthropic, Ollama)
 - 📄 File-based operations and transformations
+- 🖼️ Support for image analysis with vision models (screenshots and common image formats)
 - 🛠️ Extensible DSL for defining complex workflows
 - ⚡ Efficient processing of LLM chains
 
@@ -25,6 +26,21 @@ go build
 ```
 
 ## Configuration
+
+### Environment File
+
+COMandA uses an environment file to store provider configurations and API keys. By default, it looks for a `.env` file in the current directory. You can specify a custom path using the `COMANDA_ENV` environment variable:
+
+```bash
+# Use a specific env file
+export COMANDA_ENV=/path/to/your/env/file
+comanda process your-dsl-file.yaml
+
+# Or specify it inline
+COMANDA_ENV=/path/to/your/env/file comanda process your-dsl-file.yaml
+```
+
+### Provider Configuration
 
 Configure your providers and models using the interactive configuration command:
 
@@ -64,7 +80,21 @@ providers:
 
 ## Usage
 
-1. Create a YAML file defining your chain of operations:
+### Supported File Types
+
+COMandA supports various file types for input:
+
+- Text files: `.txt`, `.md`, `.yml`, `.yaml`
+- Image files: `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`
+- Special inputs: `screenshot` (captures current screen)
+
+When using vision-capable models (like gpt-4o), you can analyze both images and screenshots alongside text content.
+
+The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your DSL file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
+
+### Creating DSL Files
+
+Create a YAML file defining your chain of operations:
 
 ```yaml
 # example.yaml
@@ -88,10 +118,28 @@ steps:
       file: "analysis.txt"
 ```
 
-2. Run the chain:
+For image analysis:
+
+```yaml
+# image-analysis.yaml
+input: "image.png"  # Can be any supported image format
+model: "gpt-4o"
+action: "Analyze this image and describe what you see in detail."
+output: "STDOUT"
+```
+
+The `examples/` directory in the project contains various sample DSL files demonstrating different features:
+- `openai-example-dsl.yaml`: Basic OpenAI model usage
+- `ollama-example.yaml`: Local model usage with Ollama
+- `image-example.dsl.yaml`: Image analysis configuration
+- `screenshot-example-dsl.yaml`: Screenshot capture and analysis
+
+### Running Commands
+
+Run your DSL file:
 
 ```bash
-comanda process -f your_chain.yaml
+comanda process your-dsl-file.yaml
 ```
 
 For example:
@@ -107,42 +155,13 @@ Based on the company names provided, the following seem more like startups, ofte
 1. Quantum Computing Labs
 2. Blue Ocean Ventures
 3. CloudNine Solutions
-4. GreenField Robotics
-5. Phoenix Digital Group
-6. Sapphire Software Corp
-7. Crystal Clear Analytics
-8. Cascade Technologies
-9. Velocity Ventures
-10. Prism Technologies
-11. Falcon Security Systems
-12. Emerald Technologies
-13. Unity Software Corp
-14. Horizon Healthcare
-15. Cyber Defense Labs
-16. Infinity Software
-17. Oasis Digital Group
-18. Quantum Leap Systems
-19. Solar Systems Corp
-20. Vanguard Solutions
-21. Zephyr Technologies
-22. Aegis Solutions
-23. Echo Technologies
-24. Helix Technologies
-25. Impact Software
-26. Kinetic Solutions
-27. Neural Networks Inc
-28. Quest Software
-29. Radiant Solutions
-30. Yield Technologies
-
-These names typically reflect a focus on technology, innovation, and modern solutions, which are common traits of startups.
+[...]
 
 Configuration:
 - Model: [gpt-4o-mini]
 - Action: [look through these company names and identify which ones seem like startups]
 - Output: [STDOUT]
 ```
-
 
 ## Project Structure
 

@@ -15,13 +15,21 @@ type Model struct {
 
 // Provider represents a provider's configuration
 type Provider struct {
-	APIKey string   `yaml:"api_key"`
-	Models []Model  `yaml:"models"`
+	APIKey string  `yaml:"api_key"`
+	Models []Model `yaml:"models"`
 }
 
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
 	Providers map[string]Provider `yaml:"providers"`
+}
+
+// GetEnvPath returns the environment file path from COMANDA_ENV or the default
+func GetEnvPath() string {
+	if envPath := os.Getenv("COMANDA_ENV"); envPath != "" {
+		return envPath
+	}
+	return ".env"
 }
 
 // LoadEnvConfig loads the environment configuration from .env file

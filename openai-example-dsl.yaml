@@ -1,9 +1,0 @@
-input:
-  - example_filename.txt
-model:
-  - gpt-4o-mini
-action:
-  - look through these company names and identify which ones seem like startups
-output:
-  - STDOUT
-

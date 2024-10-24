@@ -16,8 +16,14 @@ type Provider interface {
 	SetVerbose(verbose bool)
 }
 
+// DetectProviderFunc is the type for the provider detection function
+type DetectProviderFunc func(modelName string) Provider
+
 // DetectProvider determines the appropriate provider based on the model name
-func DetectProvider(modelName string) Provider {
+var DetectProvider DetectProviderFunc = defaultDetectProvider
+
+// defaultDetectProvider is the default implementation of DetectProvider
+func defaultDetectProvider(modelName string) Provider {
 	providers := []Provider{
 		NewAnthropicProvider(),
 		NewOpenAIProvider(),

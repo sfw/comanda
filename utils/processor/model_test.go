@@ -13,8 +13,13 @@ func TestValidateModel(t *testing.T) {
 		expectErr bool
 	}{
 		{
-			name:      "valid OpenAI model",
-			models:    []string{"gpt-3.5-turbo"},
+			name:      "valid OpenAI text model",
+			models:    []string{"o1-preview"},
+			expectErr: false,
+		},
+		{
+			name:      "valid OpenAI vision model",
+			models:    []string{"gpt-4o"},
 			expectErr: false,
 		},
 		{
@@ -24,7 +29,7 @@ func TestValidateModel(t *testing.T) {
 		},
 		{
 			name:      "multiple valid models",
-			models:    []string{"gpt-3.5-turbo", "claude-2"},
+			models:    []string{"o1-preview", "claude-2", "gpt-4o"},
 			expectErr: false,
 		},
 		{
@@ -46,15 +51,18 @@ func TestValidateModel(t *testing.T) {
 				t.Errorf("validateModel() error = %v, expectErr %v", err, tt.expectErr)
 			}
 
-			if !tt.expectErr {
+			if !tt.expectErr && len(tt.models) > 0 {
 				for _, model := range tt.models {
-					if provider := processor.GetModelProvider(model); provider == nil && len(tt.models) > 0 {
+					if provider := processor.GetModelProvider(model); provider == nil {
 						t.Errorf("validateModel() did not store provider for model %s", model)
 					}
 				}
 			}
 		})
 	}
+
+	// Restore original DetectProvider after tests
+	restoreDetectProvider()
 }
 
 func TestConfigureProviders(t *testing.T) {
@@ -64,8 +72,13 @@ func TestConfigureProviders(t *testing.T) {
 		expectErr bool
 	}{
 		{
-			name:      "configure OpenAI provider",
-			models:    []string{"gpt-3.5-turbo"},
+			name:      "configure OpenAI text provider",
+			models:    []string{"o1-preview"},
+			expectErr: false,
+		},
+		{
+			name:      "configure OpenAI vision provider",
+			models:    []string{"gpt-4o"},
 			expectErr: false,
 		},
 		{
@@ -75,7 +88,7 @@ func TestConfigureProviders(t *testing.T) {
 		},
 		{
 			name:      "configure multiple providers",
-			models:    []string{"gpt-3.5-turbo", "claude-2"},
+			models:    []string{"o1-preview", "claude-2", "gpt-4o"},
 			expectErr: false,
 		},
 	}
@@ -105,11 +118,16 @@ func TestConfigureProviders(t *testing.T) {
 					}
 
 					// Check if provider was properly configured
-					if mp, ok := provider.(*MockProvider); ok && !mp.configured {
-						t.Errorf("Provider %s was not configured", provider.Name())
+					if mp, ok := provider.(*MockProvider); ok {
+						if !mp.configured {
+							t.Errorf("Provider %s was not configured", mp.Name())
+						}
 					}
 				}
 			}
 		})
 	}
+
+	// Restore original DetectProvider after tests
+	restoreDetectProvider()
 }

@@ -18,12 +18,18 @@ var processCmd = &cobra.Command{
 	Long:  `Process one or more DSL configuration files and execute the specified actions.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		// Get environment file path
+		envPath := config.GetEnvPath()
+
 		// Load environment configuration
 		if verbose {
-			fmt.Println("[DEBUG] Loading environment configuration from .env")
+			fmt.Printf("[DEBUG] Loading environment configuration from %s\n", envPath)
 		}
-		envConfig, err := config.LoadEnvConfig(".env")
+		envConfig, err := config.LoadEnvConfig(envPath)
 		if err != nil {
+			if os.IsNotExist(err) {
+				log.Fatalf("Environment file not found at %s. Set COMANDA_ENV environment variable to specify a different path.", envPath)
+			}
 			log.Fatalf("Error loading environment configuration: %v", err)
 		}
 		if verbose {
@@ -54,17 +60,13 @@ var processCmd = &cobra.Command{
 				continue
 			}
 
-			// Create and run processor
+			// Create processor
 			if verbose {
 				fmt.Printf("[DEBUG] Creating processor for %s\n", file)
 			}
 			proc := processor.NewProcessor(&dslConfig, envConfig, verbose)
-			if err := proc.Process(); err != nil {
-				log.Printf("Error processing DSL file %s: %v\n", file, err)
-				continue
-			}
 
-			// Print configuration summary
+			// Print configuration summary before processing
 			fmt.Println("\nConfiguration:")
 			fmt.Printf("- Model: %v\n", dslConfig.Model)
 			fmt.Printf("- Action: %v\n", dslConfig.Action)
@@ -72,6 +74,13 @@ var processCmd = &cobra.Command{
 			nextActions := proc.NormalizeStringSlice(dslConfig.NextAction)
 			if len(nextActions) > 0 {
 				fmt.Printf("- Next Action: %v\n", nextActions)
+			}
+			fmt.Println()
+
+			// Run processor
+			if err := proc.Process(); err != nil {
+				log.Printf("Error processing DSL file %s: %v\n", file, err)
+				continue
 			}
 		}
 	},

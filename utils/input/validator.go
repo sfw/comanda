@@ -2,60 +2,91 @@ package input
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+	"strings"
 )
 
-// Validator handles input validation
+// Common file extensions
+var (
+	TextExtensions = []string{
+		".txt",
+		".md",
+		".yml",
+		".yaml",
+	}
+
+	ImageExtensions = []string{
+		".png",
+		".jpg",
+		".jpeg",
+		".gif",
+		".bmp",
+	}
+)
+
+// Validator validates input paths
 type Validator struct {
 	allowedExtensions []string
 }
 
-// NewValidator creates a new input validator
-func NewValidator(allowedExtensions []string) *Validator {
+// NewValidator creates a new input validator with default text extensions
+func NewValidator(additionalExtensions []string) *Validator {
+	// Start with text and image extensions
+	allExtensions := append([]string{}, TextExtensions...)
+	allExtensions = append(allExtensions, ImageExtensions...)
+
+	// Add any additional extensions
+	if len(additionalExtensions) > 0 {
+		allExtensions = append(allExtensions, additionalExtensions...)
+	}
+
 	return &Validator{
-		allowedExtensions: allowedExtensions,
+		allowedExtensions: allExtensions,
 	}
 }
 
-// ValidatePath checks if a path exists and is accessible
+// ValidatePath checks if the path is valid
 func (v *Validator) ValidatePath(path string) error {
-	_, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("path does not exist: %s", path)
-		}
-		return fmt.Errorf("error accessing path %s: %w", path, err)
-	}
-	return nil
-}
-
-// ValidateFileExtension checks if a file has an allowed extension
-func (v *Validator) ValidateFileExtension(path string) error {
-	if len(v.allowedExtensions) == 0 {
+	// Special case for screenshot input
+	if path == "screenshot" {
 		return nil
 	}
 
-	ext := filepath.Ext(path)
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+
+	return nil
+}
+
+// ValidateFileExtension checks if the file has an allowed extension
+func (v *Validator) ValidateFileExtension(path string) error {
+	// Special case for screenshot input
+	if path == "screenshot" {
+		return nil
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == "" {
+		return fmt.Errorf("file must have an extension")
+	}
+
 	for _, allowedExt := range v.allowedExtensions {
 		if ext == allowedExt {
 			return nil
 		}
 	}
-	return fmt.Errorf("invalid file extension for %s. Allowed extensions: %v", path, v.allowedExtensions)
+
+	return fmt.Errorf("file extension %s is not allowed", ext)
 }
 
-// ValidateDirectoryAccess checks if a directory is readable
-func (v *Validator) ValidateDirectoryAccess(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("error accessing directory %s: %w", path, err)
+// IsImageFile checks if the file has an image extension
+func (v *Validator) IsImageFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	for _, imgExt := range ImageExtensions {
+		if ext == imgExt {
+			return true
+		}
 	}
-	defer file.Close()
-
-	_, err = file.Readdir(1)
-	if err != nil {
-		return fmt.Errorf("error reading directory %s: %w", path, err)
-	}
-	return nil
+	return false
 }

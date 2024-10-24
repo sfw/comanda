@@ -36,7 +36,7 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 		config:    config,
 		envConfig: envConfig,
 		handler:   input.NewHandler(),
-		validator: input.NewValidator([]string{".txt", ".md", ".yml", ".yaml"}),
+		validator: input.NewValidator(nil), // Use built-in text and image extensions
 		providers: make(map[string]models.Provider),
 		verbose:   verbose,
 	}
@@ -125,48 +125,77 @@ func (p *Processor) Process() error {
 	return nil
 }
 
+// isSpecialInput checks if the input is a special type (e.g., screenshot)
+func (p *Processor) isSpecialInput(input string) bool {
+	specialInputs := []string{"screenshot", "NA"}
+	for _, special := range specialInputs {
+		if input == special {
+			return true
+		}
+	}
+	return false
+}
+
 // processInputs handles the input section of the DSL
 func (p *Processor) processInputs(inputs []string) error {
 	p.debugf("Processing %d input(s)", len(inputs))
 	for _, inputPath := range inputs {
-		// Skip NA or empty input
-		if inputPath == "NA" || inputPath == "" {
-			p.debugf("Skipping NA/empty input: %s", inputPath)
+		// Skip empty input
+		if inputPath == "" {
+			p.debugf("Skipping empty input")
 			continue
 		}
 
 		p.debugf("Processing input path: %s", inputPath)
 
-		// First check if the exact path exists
-		if _, err := os.Stat(inputPath); err != nil {
-			if os.IsNotExist(err) {
-				// Only try glob if the path contains glob characters
-				if containsGlobChar(inputPath) {
-					matches, err := filepath.Glob(inputPath)
-					if err != nil {
-						return fmt.Errorf("error processing glob pattern %s: %w", inputPath, err)
-					}
-					if len(matches) == 0 {
-						return fmt.Errorf("no files found matching pattern: %s", inputPath)
-					}
-					for _, match := range matches {
-						if err := p.processFile(match); err != nil {
-							return err
-						}
-					}
-					continue
-				}
-				return fmt.Errorf("path does not exist: %s", inputPath)
+		// Handle special inputs first
+		if p.isSpecialInput(inputPath) {
+			if inputPath == "NA" {
+				p.debugf("Skipping NA input")
+				continue
 			}
-			return fmt.Errorf("error accessing path %s: %w", inputPath, err)
+			p.debugf("Processing special input: %s", inputPath)
+			if err := p.handler.ProcessPath(inputPath); err != nil {
+				return fmt.Errorf("error processing special input %s: %w", inputPath, err)
+			}
+			continue
 		}
 
-		// Process the exact path
-		if err := p.processFile(inputPath); err != nil {
+		// Handle regular file inputs
+		if err := p.processRegularInput(inputPath); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// processRegularInput handles regular file and directory inputs
+func (p *Processor) processRegularInput(inputPath string) error {
+	// Check if the path exists
+	if _, err := os.Stat(inputPath); err != nil {
+		if os.IsNotExist(err) {
+			// Only try glob if the path contains glob characters
+			if containsGlobChar(inputPath) {
+				matches, err := filepath.Glob(inputPath)
+				if err != nil {
+					return fmt.Errorf("error processing glob pattern %s: %w", inputPath, err)
+				}
+				if len(matches) == 0 {
+					return fmt.Errorf("no files found matching pattern: %s", inputPath)
+				}
+				for _, match := range matches {
+					if err := p.processFile(match); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			return fmt.Errorf("path does not exist: %s", inputPath)
+		}
+		return fmt.Errorf("error accessing path %s: %w", inputPath, err)
+	}
+
+	return p.processFile(inputPath)
 }
 
 // processFile handles a single file input
@@ -203,6 +232,12 @@ func (p *Processor) validateModel(modelNames []string) error {
 		if provider == nil {
 			return fmt.Errorf("unsupported model: %s", modelName)
 		}
+
+		// Check if the provider actually supports this model
+		if !provider.SupportsModel(modelName) {
+			return fmt.Errorf("unsupported model: %s", modelName)
+		}
+
 		provider.SetVerbose(p.verbose)
 		p.providers[modelName] = provider
 		p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
@@ -233,16 +268,6 @@ func (p *Processor) configureProviders() error {
 			providerConfig, err = p.envConfig.GetProviderConfig("anthropic")
 		case "OpenAI":
 			providerConfig, err = p.envConfig.GetProviderConfig("openai")
-		case "Ollama":
-			providerConfig, err = p.envConfig.GetProviderConfig("ollama")
-			if err == nil {
-				// Ollama doesn't need an API key, so we can configure it directly
-				if err := provider.Configure(""); err != nil {
-					return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
-				}
-				configuredProviders[providerName] = true
-				continue
-			}
 		default:
 			return fmt.Errorf("unknown provider for model: %s", modelName)
 		}
@@ -251,7 +276,7 @@ func (p *Processor) configureProviders() error {
 			return fmt.Errorf("failed to get config for provider %s: %w", providerName, err)
 		}
 
-		if providerName != "Ollama" && providerConfig.APIKey == "" {
+		if providerConfig.APIKey == "" {
 			return fmt.Errorf("missing API key for provider %s", providerName)
 		}
 
@@ -289,33 +314,52 @@ func (p *Processor) processActions(modelNames []string, actions []string) error 
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
-		// Combine input contents with action
-		fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", inputContents, action)
+		// For vision models, put the action before the input
+		if modelName == "gpt-4o" || modelName == "gpt-4o-mini" {
+			fullPrompt := fmt.Sprintf("%s\nInput:\n%s", action, inputContents)
+			p.debugf("Prepared vision prompt with action first")
+			response, err := provider.SendPrompt(modelName, fullPrompt)
+			if err != nil {
+				return fmt.Errorf("failed to process action with model %s: %w", modelName, err)
+			}
+			if err := p.handleOutput(modelName, response); err != nil {
+				return err
+			}
+			continue
+		}
 
+		// For non-vision models, keep the original format
+		fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", inputContents, action)
 		response, err := provider.SendPrompt(modelName, fullPrompt)
 		if err != nil {
 			return fmt.Errorf("failed to process action with model %s: %w", modelName, err)
 		}
-
-		// Handle output based on configuration
-		outputs := p.NormalizeStringSlice(p.config.Output)
-		p.debugf("Handling %d output(s)", len(outputs))
-		for _, output := range outputs {
-			p.debugf("Processing output: %s", output)
-			if output == "STDOUT" {
-				fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
-				p.debugf("Response written to STDOUT")
-			} else {
-				// Write to file
-				p.debugf("Writing response to file: %s", output)
-				if err := os.WriteFile(output, []byte(response), 0644); err != nil {
-					return fmt.Errorf("failed to write response to file %s: %w", output, err)
-				}
-				p.debugf("Response successfully written to file: %s", output)
-			}
+		if err := p.handleOutput(modelName, response); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// handleOutput processes the model's response according to the output configuration
+func (p *Processor) handleOutput(modelName string, response string) error {
+	outputs := p.NormalizeStringSlice(p.config.Output)
+	p.debugf("Handling %d output(s)", len(outputs))
+	for _, output := range outputs {
+		p.debugf("Processing output: %s", output)
+		if output == "STDOUT" {
+			fmt.Printf("\nResponse from %s:\n%s\n", modelName, response)
+			p.debugf("Response written to STDOUT")
+		} else {
+			// Write to file
+			p.debugf("Writing response to file: %s", output)
+			if err := os.WriteFile(output, []byte(response), 0644); err != nil {
+				return fmt.Errorf("failed to write response to file %s: %w", output, err)
+			}
+			p.debugf("Response successfully written to file: %s", output)
+		}
+	}
 	return nil
 }
 
