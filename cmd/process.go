@@ -75,6 +75,10 @@ var processCmd = &cobra.Command{
 			if len(nextActions) > 0 {
 				fmt.Printf("- Next Action: %v\n", nextActions)
 			}
+			inputs := proc.NormalizeStringSlice(dslConfig.Input)
+			if len(inputs) > 0 && inputs[0] != "NA" {
+				fmt.Printf("- Input: %v\n", inputs)
+			}
 			fmt.Println()
 
 			// Run processor

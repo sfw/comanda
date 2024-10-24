@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
 	"gopkg.in/yaml.v2"
 
+	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/spf13/cobra"
 )
 
 type Provider struct {
-	APIKey string `yaml:"api_key"`
+	APIKey string  `yaml:"api_key"`
 	Models []Model `yaml:"models"`
 }
 
@@ -59,16 +62,19 @@ var configureCmd = &cobra.Command{
 
 		reader := bufio.NewReader(os.Stdin)
 
+		// Get config path from environment or default
+		configPath := config.GetEnvPath()
+
 		// Read existing configuration
-		var config Config
-		configData, err := os.ReadFile(".env")
+		var cfg Config
+		configData, err := os.ReadFile(configPath)
 		if err == nil {
-			err = yaml.Unmarshal(configData, &config)
+			err = yaml.Unmarshal(configData, &cfg)
 			if err != nil {
-				config.Providers = make(map[string]Provider)
+				cfg.Providers = make(map[string]Provider)
 			}
 		} else {
-			config.Providers = make(map[string]Provider)
+			cfg.Providers = make(map[string]Provider)
 		}
 
 		// Prompt for provider
@@ -92,7 +98,7 @@ var configureCmd = &cobra.Command{
 		}
 
 		// Check if provider exists
-		existingProvider, exists := config.Providers[provider]
+		existingProvider, exists := cfg.Providers[provider]
 		var apiKey string
 		if !exists {
 			if provider != "ollama" {
@@ -140,46 +146,56 @@ var configureCmd = &cobra.Command{
 			Type: modelType,
 		}
 		existingProvider.Models = append(existingProvider.Models, newModel)
-		config.Providers[provider] = existingProvider
+		cfg.Providers[provider] = existingProvider
+
+		// Ensure the directory exists
+		if dir := strings.TrimSuffix(configPath, "/"+filepath.Base(configPath)); dir != "" {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				fmt.Printf("Error creating directory: %v\n", err)
+				return
+			}
+		}
 
 		// Write updated configuration
-		yamlData, err := yaml.Marshal(&config)
+		yamlData, err := yaml.Marshal(&cfg)
 		if err != nil {
 			fmt.Printf("Error marshaling configuration: %v\n", err)
 			return
 		}
 
-		err = os.WriteFile(".env", yamlData, 0644)
+		err = os.WriteFile(configPath, yamlData, 0644)
 		if err != nil {
 			fmt.Printf("Error writing configuration: %v\n", err)
 			return
 		}
 
-		fmt.Println("Configuration saved successfully!")
+		fmt.Printf("Configuration saved successfully to %s!\n", configPath)
 	},
 }
 
 func listConfiguration() {
-	configData, err := os.ReadFile(".env")
+	configPath := config.GetEnvPath()
+	configData, err := os.ReadFile(configPath)
 	if err != nil {
-		fmt.Println("No configuration found.")
+		fmt.Printf("No configuration found at %s\n", configPath)
 		return
 	}
 
-	var config Config
-	err = yaml.Unmarshal(configData, &config)
+	var cfg Config
+	err = yaml.Unmarshal(configData, &cfg)
 	if err != nil {
 		fmt.Printf("Error reading configuration: %v\n", err)
 		return
 	}
 
-	if len(config.Providers) == 0 {
+	if len(cfg.Providers) == 0 {
 		fmt.Println("No providers configured.")
 		return
 	}
 
+	fmt.Printf("Configuration from %s:\n\n", configPath)
 	fmt.Println("Configured Providers:")
-	for provider, data := range config.Providers {
+	for provider, data := range cfg.Providers {
 		fmt.Printf("\n%s:\n", provider)
 		if len(data.Models) == 0 {
 			fmt.Println("  No models configured")

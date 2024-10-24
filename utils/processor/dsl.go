@@ -260,6 +260,16 @@ func (p *Processor) configureProviders() error {
 
 		p.debugf("Configuring provider %s for model %s", providerName, modelName)
 
+		// Handle Ollama provider separately since it doesn't need an API key
+		if providerName == "Ollama" {
+			if err := provider.Configure(""); err != nil {
+				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
+			}
+			p.debugf("Successfully configured local provider %s", providerName)
+			configuredProviders[providerName] = true
+			continue
+		}
+
 		var providerConfig *config.Provider
 		var err error
 
