@@ -3,7 +3,22 @@ package processor
 import (
 	"reflect"
 	"testing"
+
+	"github.com/kris-hansen/comanda/utils/config"
 )
+
+func createTestEnvConfig() *config.EnvConfig {
+	return &config.EnvConfig{
+		Providers: map[string]*config.Provider{
+			"openai": {
+				APIKey: "test-key",
+			},
+			"anthropic": {
+				APIKey: "test-key",
+			},
+		},
+	}
+}
 
 func TestNormalizeStringSlice(t *testing.T) {
 	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
@@ -88,6 +103,56 @@ func TestNewProcessor(t *testing.T) {
 
 	if processor.providers == nil {
 		t.Error("NewProcessor() did not initialize providers map")
+	}
+}
+
+func TestProcess(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      DSLConfig
+		expectError bool
+	}{
+		{
+			name:        "empty config",
+			config:      DSLConfig{},
+			expectError: true,
+		},
+		{
+			name: "single step with missing model",
+			config: DSLConfig{
+				"step_one": StepConfig{
+					Action: []string{"test action"},
+					Output: []string{"STDOUT"},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "valid single step",
+			config: DSLConfig{
+				"step_one": StepConfig{
+					Input:  []string{"NA"},
+					Model:  []string{"gpt-4"},
+					Action: []string{"test action"},
+					Output: []string{"STDOUT"},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewProcessor(&tt.config, createTestEnvConfig(), false)
+			err := processor.Process()
+
+			if tt.expectError && err == nil {
+				t.Error("Process() expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Process() unexpected error: %v", err)
+			}
+		})
 	}
 }
 

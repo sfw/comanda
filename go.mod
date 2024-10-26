@@ -6,6 +6,7 @@ require (
 	github.com/kbinani/screenshot v0.0.0-20240820160931-a8a2c5d0e191
 	github.com/sashabaranov/go-openai v1.32.3
 	github.com/spf13/cobra v1.8.0
+	golang.org/x/image v0.21.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )

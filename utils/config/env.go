@@ -7,10 +7,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ModelMode represents the supported modes for a model
+type ModelMode string
+
+const (
+	TextMode   ModelMode = "text"
+	VisionMode ModelMode = "vision"
+	MultiMode  ModelMode = "multi"
+)
+
 // Model represents a single model configuration
 type Model struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
+	Name  string      `yaml:"name"`
+	Type  string      `yaml:"type"`
+	Modes []ModelMode `yaml:"modes"`
 }
 
 // Provider represents a provider's configuration
@@ -21,7 +31,7 @@ type Provider struct {
 
 // EnvConfig represents the complete environment configuration
 type EnvConfig struct {
-	Providers map[string]Provider `yaml:"providers"`
+	Providers map[string]*Provider `yaml:"providers"` // Changed to store pointers to Provider
 }
 
 // Verbose indicates whether verbose logging is enabled
@@ -60,6 +70,16 @@ func LoadEnvConfig(path string) (*EnvConfig, error) {
 		return nil, fmt.Errorf("error parsing env file: %w", err)
 	}
 
+	// Convert any non-pointer providers to pointers
+	if config.Providers != nil {
+		for name, provider := range config.Providers {
+			if provider != nil {
+				// Ensure we're storing a pointer
+				config.Providers[name] = provider
+			}
+		}
+	}
+
 	debugLog("Successfully loaded environment configuration")
 	return &config, nil
 }
@@ -89,15 +109,36 @@ func (c *EnvConfig) GetProviderConfig(providerName string) (*Provider, error) {
 	if !exists {
 		return nil, fmt.Errorf("provider %s not found in configuration", providerName)
 	}
-	return &provider, nil
+	if provider == nil {
+		return nil, fmt.Errorf("provider %s configuration is nil", providerName)
+	}
+	return provider, nil
 }
 
 // AddProvider adds or updates a provider configuration
 func (c *EnvConfig) AddProvider(name string, provider Provider) {
 	if c.Providers == nil {
-		c.Providers = make(map[string]Provider)
+		c.Providers = make(map[string]*Provider)
 	}
-	c.Providers[name] = provider
+	// Store a pointer to the provider
+	providerCopy := provider
+	c.Providers[name] = &providerCopy
+}
+
+// ValidateModelMode checks if a mode is valid
+func ValidateModelMode(mode ModelMode) bool {
+	validModes := []ModelMode{TextMode, VisionMode, MultiMode}
+	for _, validMode := range validModes {
+		if mode == validMode {
+			return true
+		}
+	}
+	return false
+}
+
+// GetSupportedModes returns all supported model modes
+func GetSupportedModes() []ModelMode {
+	return []ModelMode{TextMode, VisionMode, MultiMode}
 }
 
 // AddModelToProvider adds a model to a specific provider
@@ -114,8 +155,14 @@ func (c *EnvConfig) AddModelToProvider(providerName string, model Model) error {
 		}
 	}
 
+	// Validate modes
+	for _, mode := range model.Modes {
+		if !ValidateModelMode(mode) {
+			return fmt.Errorf("invalid model mode: %s", mode)
+		}
+	}
+
 	provider.Models = append(provider.Models, model)
-	c.Providers[providerName] = provider
 	return nil
 }
 
@@ -143,6 +190,38 @@ func (c *EnvConfig) UpdateAPIKey(providerName, apiKey string) error {
 	}
 
 	provider.APIKey = apiKey
-	c.Providers[providerName] = provider
 	return nil
+}
+
+// HasMode checks if a model supports a specific mode
+func (m *Model) HasMode(mode ModelMode) bool {
+	for _, supportedMode := range m.Modes {
+		if supportedMode == mode {
+			return true
+		}
+	}
+	return false
+}
+
+// UpdateModelModes updates the modes for a specific model
+func (c *EnvConfig) UpdateModelModes(providerName, modelName string, modes []ModelMode) error {
+	provider, exists := c.Providers[providerName]
+	if !exists {
+		return fmt.Errorf("provider %s not found", providerName)
+	}
+
+	for i, model := range provider.Models {
+		if model.Name == modelName {
+			// Validate all modes before updating
+			for _, mode := range modes {
+				if !ValidateModelMode(mode) {
+					return fmt.Errorf("invalid model mode: %s", mode)
+				}
+			}
+			provider.Models[i].Modes = modes
+			return nil
+		}
+	}
+
+	return fmt.Errorf("model %s not found for provider %s", modelName, providerName)
 }

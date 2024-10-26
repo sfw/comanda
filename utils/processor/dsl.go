@@ -11,8 +11,8 @@ import (
 	"github.com/kris-hansen/comanda/utils/models"
 )
 
-// DSLConfig represents the structure of the DSL configuration
-type DSLConfig struct {
+// StepConfig represents the configuration for a single step
+type StepConfig struct {
 	Input      interface{} `yaml:"input"`       // Can be string or []string
 	Model      interface{} `yaml:"model"`       // Can be string or []string
 	Action     interface{} `yaml:"action"`      // Can be string or []string
@@ -20,14 +20,18 @@ type DSLConfig struct {
 	NextAction interface{} `yaml:"next-action"` // Can be string or []string
 }
 
+// DSLConfig represents the structure of the DSL configuration
+type DSLConfig map[string]StepConfig
+
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config    *DSLConfig
-	envConfig *config.EnvConfig
-	handler   *input.Handler
-	validator *input.Validator
-	providers map[string]models.Provider
-	verbose   bool
+	config     *DSLConfig
+	envConfig  *config.EnvConfig
+	handler    *input.Handler
+	validator  *input.Validator
+	providers  map[string]models.Provider // Key is provider name, not model name
+	verbose    bool
+	lastOutput string
 }
 
 // NewProcessor creates a new DSL processor
@@ -36,7 +40,7 @@ func NewProcessor(config *DSLConfig, envConfig *config.EnvConfig, verbose bool) 
 		config:    config,
 		envConfig: envConfig,
 		handler:   input.NewHandler(),
-		validator: input.NewValidator(nil), // Use built-in text and image extensions
+		validator: input.NewValidator(nil),
 		providers: make(map[string]models.Provider),
 		verbose:   verbose,
 	}
@@ -82,43 +86,81 @@ func (p *Processor) NormalizeStringSlice(val interface{}) []string {
 // Process executes the DSL processing pipeline
 func (p *Processor) Process() error {
 	p.debugf("Starting DSL processing")
-	p.debugf("Parsing DSL configuration sections")
 
-	inputs := p.NormalizeStringSlice(p.config.Input)
-	modelNames := p.NormalizeStringSlice(p.config.Model)
-	actions := p.NormalizeStringSlice(p.config.Action)
+	if len(*p.config) == 0 {
+		return fmt.Errorf("no steps defined in DSL configuration")
+	}
 
-	p.debugf("Processing with configuration:")
-	p.debugf("- Inputs: %v", inputs)
-	p.debugf("- Models: %v", modelNames)
-	p.debugf("- Actions: %v", actions)
+	for stepName, stepConfig := range *p.config {
+		p.debugf("Processing step: %s", stepName)
 
-	// Skip input processing if it's "NA"
-	if len(inputs) != 1 || inputs[0] != "NA" {
-		p.debugf("Processing inputs...")
-		if err := p.processInputs(inputs); err != nil {
-			return fmt.Errorf("input processing error: %w", err)
+		inputs := p.NormalizeStringSlice(stepConfig.Input)
+		modelNames := p.NormalizeStringSlice(stepConfig.Model)
+		actions := p.NormalizeStringSlice(stepConfig.Action)
+
+		p.debugf("Step configuration:")
+		p.debugf("- Inputs: %v", inputs)
+		p.debugf("- Models: %v", modelNames)
+		p.debugf("- Actions: %v", actions)
+
+		// Handle STDIN specially
+		if len(inputs) == 1 && inputs[0] == "STDIN" {
+			if p.lastOutput == "" {
+				return fmt.Errorf("STDIN specified but no previous output available")
+			}
+			// Create a temporary file with .txt extension for the STDIN content
+			tmpFile, err := os.CreateTemp("", "comanda-stdin-*.txt")
+			if err != nil {
+				return fmt.Errorf("failed to create temp file for STDIN: %w", err)
+			}
+			tmpPath := tmpFile.Name()
+			defer os.Remove(tmpPath)
+
+			if _, err := tmpFile.WriteString(p.lastOutput); err != nil {
+				tmpFile.Close()
+				return fmt.Errorf("failed to write to temp file: %w", err)
+			}
+			tmpFile.Close()
+
+			// Update inputs to use the temporary file
+			inputs = []string{tmpPath}
 		}
-	} else {
-		p.debugf("Skipping input processing (NA specified)")
-	}
 
-	// Detect and validate model
-	p.debugf("Starting model validation phase")
-	if err := p.validateModel(modelNames); err != nil {
-		return fmt.Errorf("model validation error: %w", err)
-	}
+		// Process inputs for this step
+		if len(inputs) != 1 || inputs[0] != "NA" {
+			p.debugf("Processing inputs for step %s...", stepName)
+			if err := p.processInputs(inputs); err != nil {
+				return fmt.Errorf("input processing error in step %s: %w", stepName, err)
+			}
+		}
 
-	// Configure providers
-	p.debugf("Starting provider configuration phase")
-	if err := p.configureProviders(); err != nil {
-		return fmt.Errorf("provider configuration error: %w", err)
-	}
+		// Validate model for this step
+		if err := p.validateModel(modelNames); err != nil {
+			return fmt.Errorf("model validation error in step %s: %w", stepName, err)
+		}
 
-	// Process actions
-	p.debugf("Starting action processing phase")
-	if err := p.processActions(modelNames, actions); err != nil {
-		return fmt.Errorf("action processing error: %w", err)
+		// Configure providers if needed
+		if err := p.configureProviders(); err != nil {
+			return fmt.Errorf("provider configuration error in step %s: %w", stepName, err)
+		}
+
+		// Process actions for this step
+		response, err := p.processActions(modelNames, actions)
+		if err != nil {
+			return fmt.Errorf("action processing error in step %s: %w", stepName, err)
+		}
+
+		// Store the response for potential use as STDIN in next step
+		p.lastOutput = response
+
+		// Handle output for this step
+		outputs := p.NormalizeStringSlice(stepConfig.Output)
+		if err := p.handleOutput(modelNames[0], response, outputs); err != nil {
+			return fmt.Errorf("output handling error in step %s: %w", stepName, err)
+		}
+
+		// Clear the handler's contents for the next step
+		p.handler = input.NewHandler()
 	}
 
 	p.debugf("DSL processing completed successfully")
@@ -127,7 +169,7 @@ func (p *Processor) Process() error {
 
 // isSpecialInput checks if the input is a special type (e.g., screenshot)
 func (p *Processor) isSpecialInput(input string) bool {
-	specialInputs := []string{"screenshot", "NA"}
+	specialInputs := []string{"screenshot", "NA", "STDIN"}
 	for _, special := range specialInputs {
 		if input == special {
 			return true
@@ -152,6 +194,10 @@ func (p *Processor) processInputs(inputs []string) error {
 		if p.isSpecialInput(inputPath) {
 			if inputPath == "NA" {
 				p.debugf("Skipping NA input")
+				continue
+			}
+			if inputPath == "STDIN" {
+				p.debugf("Skipping STDIN input as it's handled in Process()")
 				continue
 			}
 			p.debugf("Processing special input: %s", inputPath)
@@ -225,6 +271,10 @@ func containsGlobChar(path string) bool {
 
 // validateModel checks if the specified model is supported
 func (p *Processor) validateModel(modelNames []string) error {
+	if len(modelNames) == 0 {
+		return fmt.Errorf("no model specified")
+	}
+
 	p.debugf("Validating %d model(s)", len(modelNames))
 	for _, modelName := range modelNames {
 		p.debugf("Detecting provider for model: %s", modelName)
@@ -239,7 +289,8 @@ func (p *Processor) validateModel(modelNames []string) error {
 		}
 
 		provider.SetVerbose(p.verbose)
-		p.providers[modelName] = provider
+		// Store provider by provider name instead of model name
+		p.providers[provider.Name()] = provider
 		p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
 	}
 	return nil
@@ -247,18 +298,10 @@ func (p *Processor) validateModel(modelNames []string) error {
 
 // configureProviders sets up all detected providers with API keys
 func (p *Processor) configureProviders() error {
-	configuredProviders := make(map[string]bool)
-	p.debugf("Configuring providers for %d model(s)", len(p.providers))
+	p.debugf("Configuring providers")
 
-	for modelName, provider := range p.providers {
-		providerName := provider.Name()
-		// Skip if provider already configured
-		if configuredProviders[providerName] {
-			p.debugf("Provider %s already configured, skipping", providerName)
-			continue
-		}
-
-		p.debugf("Configuring provider %s for model %s", providerName, modelName)
+	for providerName, provider := range p.providers {
+		p.debugf("Configuring provider %s", providerName)
 
 		// Handle Ollama provider separately since it doesn't need an API key
 		if providerName == "Ollama" {
@@ -266,7 +309,6 @@ func (p *Processor) configureProviders() error {
 				return fmt.Errorf("failed to configure provider %s: %w", providerName, err)
 			}
 			p.debugf("Successfully configured local provider %s", providerName)
-			configuredProviders[providerName] = true
 			continue
 		}
 
@@ -279,7 +321,7 @@ func (p *Processor) configureProviders() error {
 		case "OpenAI":
 			providerConfig, err = p.envConfig.GetProviderConfig("openai")
 		default:
-			return fmt.Errorf("unknown provider for model: %s", modelName)
+			return fmt.Errorf("unknown provider: %s", providerName)
 		}
 
 		if err != nil {
@@ -297,64 +339,57 @@ func (p *Processor) configureProviders() error {
 		}
 
 		p.debugf("Successfully configured provider %s", providerName)
-		configuredProviders[providerName] = true
 	}
 	return nil
 }
 
 // processActions handles the action section of the DSL
-func (p *Processor) processActions(modelNames []string, actions []string) error {
+func (p *Processor) processActions(modelNames []string, actions []string) (string, error) {
 	if len(modelNames) == 0 {
-		return fmt.Errorf("no model specified for actions")
+		return "", fmt.Errorf("no model specified for actions")
 	}
 
 	// For now, use the first model specified
 	modelName := modelNames[0]
-	provider := p.providers[modelName]
+
+	// Get provider by detecting it from the model name
+	provider := models.DetectProvider(modelName)
 	if provider == nil {
-		return fmt.Errorf("provider not found for model: %s", modelName)
+		return "", fmt.Errorf("provider not found for model: %s", modelName)
 	}
 
-	p.debugf("Using model %s with provider %s", modelName, provider.Name())
+	// Use the configured provider instance
+	configuredProvider := p.providers[provider.Name()]
+	if configuredProvider == nil {
+		return "", fmt.Errorf("provider %s not configured", provider.Name())
+	}
+
+	p.debugf("Using model %s with provider %s", modelName, configuredProvider.Name())
 	p.debugf("Processing %d action(s)", len(actions))
 
 	// Get all input contents
 	inputContents := string(p.handler.GetAllContents())
+	var finalResponse string
 
 	for i, action := range actions {
 		p.debugf("Processing action %d/%d: %s", i+1, len(actions), action)
 
-		// For vision models, put the action before the input
-		if modelName == "gpt-4o" || modelName == "gpt-4o-mini" {
-			fullPrompt := fmt.Sprintf("%s\nInput:\n%s", action, inputContents)
-			p.debugf("Prepared vision prompt with action first")
-			response, err := provider.SendPrompt(modelName, fullPrompt)
-			if err != nil {
-				return fmt.Errorf("failed to process action with model %s: %w", modelName, err)
-			}
-			if err := p.handleOutput(modelName, response); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// For non-vision models, keep the original format
+		// Use consistent format for all text inputs
 		fullPrompt := fmt.Sprintf("Input:\n%s\nAction: %s", inputContents, action)
-		response, err := provider.SendPrompt(modelName, fullPrompt)
+		p.debugf("Prepared prompt with input and action")
+
+		response, err := configuredProvider.SendPrompt(modelName, fullPrompt)
 		if err != nil {
-			return fmt.Errorf("failed to process action with model %s: %w", modelName, err)
+			return "", fmt.Errorf("failed to process action with model %s: %w", modelName, err)
 		}
-		if err := p.handleOutput(modelName, response); err != nil {
-			return err
-		}
+		finalResponse = response
 	}
 
-	return nil
+	return finalResponse, nil
 }
 
 // handleOutput processes the model's response according to the output configuration
-func (p *Processor) handleOutput(modelName string, response string) error {
-	outputs := p.NormalizeStringSlice(p.config.Output)
+func (p *Processor) handleOutput(modelName string, response string, outputs []string) error {
 	p.debugf("Handling %d output(s)", len(outputs))
 	for _, output := range outputs {
 		p.debugf("Processing output: %s", output)
@@ -380,5 +415,9 @@ func (p *Processor) GetProcessedInputs() []*input.Input {
 
 // GetModelProvider returns the provider for the specified model
 func (p *Processor) GetModelProvider(modelName string) models.Provider {
-	return p.providers[modelName]
+	provider := models.DetectProvider(modelName)
+	if provider == nil {
+		return nil
+	}
+	return p.providers[provider.Name()]
 }

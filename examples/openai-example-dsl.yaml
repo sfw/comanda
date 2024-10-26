@@ -1,9 +1,21 @@
-input:
-  - example_filename.txt
-model:
-  - gpt-4o-mini
-action:
-  - look through these company names and identify the top five which seem most likely to be startups
-output:
-  - STDOUT
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - gpt-4o-mini
+  action:
+    - look through these company names and identify the top five which seem most likely to be startups
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN
+  model:
+    - gpt-4o
+  action:
+    - for each of these company names provide a snappy tagline that would make them stand out
+  output:
+    - STDOUT
+
 

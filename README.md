@@ -52,12 +52,41 @@ This will prompt you to:
 1. Select a provider (OpenAI/Anthropic/Ollama)
 2. Enter API key (for OpenAI/Anthropic)
 3. Specify model name
+4. Select model mode:
+   - text: For text-only operations
+   - vision: For image analysis capabilities
+   - multi: For both text and image operations
 
 You can view your current configuration using:
 
 ```bash
-comanda configure --list
+comanda configure --list                       
+Configuration from .env:
+
+Configured Providers:
+
+ollama:
+  - codellama (local)
+  - llama3.2 (local)
+  - phi3.5 (local)
+
+openai:
+  - gpt-4o-mini (external)
+    Mode: multi
+
+anthropic:
+  - claude-3-opus (external)
+  - claude-3-sonnet (external)
+  - claude-3-5-haiku (external)
 ```
+
+To remove a model from the configuration:
+
+```bash
+comanda configure --remove <model-name>
+```
+
+When configuring a model that already exists, you'll be prompted to update its mode. This allows you to change a model's capabilities without removing and re-adding it.
 
 Example configuration output:
 ```yaml
@@ -67,15 +96,21 @@ providers:
     models:
       - name: gpt-4
         type: external
+        mode: text
+      - name: gpt-4o
+        type: external
+        mode: vision
   anthropic:
     api_key: sk-...
     models:
       - name: claude-2
         type: external
+        mode: text
   ollama:
     models:
       - name: llama2
         type: local
+        mode: text
 ```
 
 ## Usage
@@ -89,6 +124,11 @@ COMandA supports various file types for input:
 - Special inputs: `screenshot` (captures current screen)
 
 When using vision-capable models (like gpt-4o), you can analyze both images and screenshots alongside text content.
+
+Images are automatically optimized for processing:
+- Large images are automatically resized to a maximum dimension of 1024px while preserving aspect ratio
+- PNG compression is applied to reduce token usage while maintaining quality
+- These optimizations help prevent rate limit errors and ensure efficient processing
 
 The screenshot feature allows you to capture the current screen state for analysis. When you specify `screenshot` as the input in your DSL file, COMandA will automatically capture the entire screen and pass it to the specified model for analysis. This is particularly useful for UI analysis, bug reports, or any scenario where you need to analyze the current screen state.
 

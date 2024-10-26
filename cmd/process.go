@@ -68,16 +68,19 @@ var processCmd = &cobra.Command{
 
 			// Print configuration summary before processing
 			fmt.Println("\nConfiguration:")
-			fmt.Printf("- Model: %v\n", dslConfig.Model)
-			fmt.Printf("- Action: %v\n", dslConfig.Action)
-			fmt.Printf("- Output: %v\n", dslConfig.Output)
-			nextActions := proc.NormalizeStringSlice(dslConfig.NextAction)
-			if len(nextActions) > 0 {
-				fmt.Printf("- Next Action: %v\n", nextActions)
-			}
-			inputs := proc.NormalizeStringSlice(dslConfig.Input)
-			if len(inputs) > 0 && inputs[0] != "NA" {
-				fmt.Printf("- Input: %v\n", inputs)
+			for stepName, step := range dslConfig {
+				fmt.Printf("\nStep: %s\n", stepName)
+				inputs := proc.NormalizeStringSlice(step.Input)
+				if len(inputs) > 0 && inputs[0] != "NA" {
+					fmt.Printf("- Input: %v\n", inputs)
+				}
+				fmt.Printf("- Model: %v\n", proc.NormalizeStringSlice(step.Model))
+				fmt.Printf("- Action: %v\n", proc.NormalizeStringSlice(step.Action))
+				fmt.Printf("- Output: %v\n", proc.NormalizeStringSlice(step.Output))
+				nextActions := proc.NormalizeStringSlice(step.NextAction)
+				if len(nextActions) > 0 {
+					fmt.Printf("- Next Action: %v\n", nextActions)
+				}
 			}
 			fmt.Println()
 

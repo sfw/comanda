@@ -42,19 +42,21 @@ func (o *OpenAIProvider) debugf(format string, args ...interface{}) {
 func (o *OpenAIProvider) SupportsModel(modelName string) bool {
 	o.debugf("Checking if model is supported: %s", modelName)
 	modelName = strings.ToLower(modelName)
-	validModels := []string{
-		"gpt-4o",
-		"gpt-4o-mini",
-		"o1-preview",
-		"o1-mini",
+
+	// Accept any model name that starts with our known prefixes
+	validPrefixes := []string{
+		"gpt-",
+		"o1-",
 	}
-	for _, valid := range validModels {
-		if modelName == valid {
-			o.debugf("Model %s is supported", modelName)
+
+	for _, prefix := range validPrefixes {
+		if strings.HasPrefix(modelName, prefix) {
+			o.debugf("Model %s is supported (matches prefix %s)", modelName, prefix)
 			return true
 		}
 	}
-	o.debugf("Model %s is not supported", modelName)
+
+	o.debugf("Model %s is not supported (no matching prefix)", modelName)
 	return false
 }
 
@@ -88,8 +90,8 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 
 	client := openai.NewClient(o.apiKey)
 
-	// Check if this is a vision model request
-	if modelName == "gpt-4o" || modelName == "gpt-4o-mini" {
+	// Check if this is a vision input by looking for base64 image data
+	if strings.HasPrefix(modelName, "gpt-4") && strings.Contains(prompt, ";base64,") {
 		return o.handleVisionPrompt(client, prompt, modelName)
 	}
 
@@ -126,13 +128,27 @@ func (o *OpenAIProvider) SendPrompt(modelName string, prompt string) (string, er
 // handleVisionPrompt processes a vision model request with image data
 func (o *OpenAIProvider) handleVisionPrompt(client *openai.Client, prompt string, modelName string) (string, error) {
 	// Split the prompt into text and base64 image data
-	parts := strings.SplitN(prompt, "\nInput:\n", 2)
+	parts := strings.Split(prompt, "Action: ")
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid vision prompt format")
 	}
 
-	action := parts[0]
-	imageData := strings.TrimSpace(parts[1])
+	// Extract image data from the input section
+	inputParts := strings.Split(parts[0], "Input:\n")
+	if len(inputParts) != 2 {
+		return "", fmt.Errorf("invalid input format in vision prompt")
+	}
+
+	imageData := strings.TrimSpace(inputParts[1])
+	action := strings.TrimSpace(parts[1])
+
+	o.debugf("Vision prompt image data length: %d", len(imageData))
+	o.debugf("Vision prompt action length: %d", len(action))
+
+	// Check if image data is properly formatted
+	if !strings.HasPrefix(imageData, "data:image/") && !strings.Contains(imageData, ";base64,") {
+		imageData = fmt.Sprintf("data:image/png;base64,%s", imageData)
+	}
 
 	// Create the message content with text and image parts
 	content := []openai.ChatMessagePart{
@@ -143,7 +159,7 @@ func (o *OpenAIProvider) handleVisionPrompt(client *openai.Client, prompt string
 		{
 			Type: openai.ChatMessagePartTypeImageURL,
 			ImageURL: &openai.ChatMessageImageURL{
-				URL: fmt.Sprintf("data:image/png;base64,%s", imageData),
+				URL: imageData,
 			},
 		},
 	}
