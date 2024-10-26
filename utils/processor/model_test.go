@@ -40,7 +40,7 @@ func TestValidateModel(t *testing.T) {
 		{
 			name:      "empty model list",
 			models:    []string{},
-			expectErr: false,
+			expectErr: true, // Changed to true since models are required
 		},
 	}
 

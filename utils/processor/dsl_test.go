@@ -3,22 +3,7 @@ package processor
 import (
 	"reflect"
 	"testing"
-
-	"github.com/kris-hansen/comanda/utils/config"
 )
-
-func createTestEnvConfig() *config.EnvConfig {
-	return &config.EnvConfig{
-		Providers: map[string]*config.Provider{
-			"openai": {
-				APIKey: "test-key",
-			},
-			"anthropic": {
-				APIKey: "test-key",
-			},
-		},
-	}
-}
 
 func TestNormalizeStringSlice(t *testing.T) {
 	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
