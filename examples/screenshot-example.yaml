@@ -1,4 +1,5 @@
-input: screenshot
-model: gpt-4o
-action: "Analyze this screenshot and describe what you see in detail."
-output: STDOUT
+ step: 
+  input: screenshot
+  model: gpt-4o
+  action: "Analyze this screenshot and describe what you see in detail."
+  output: STDOUT
