@@ -168,12 +168,6 @@ action: "Analyze this image and describe what you see in detail."
 output: "STDOUT"
 ```
 
-The `examples/` directory in the project contains various sample DSL files demonstrating different features:
-- `openai-example-dsl.yaml`: Basic OpenAI model usage
-- `ollama-example.yaml`: Local model usage with Ollama
-- `image-example.dsl.yaml`: Image analysis configuration
-- `screenshot-example-dsl.yaml`: Screenshot capture and analysis
-
 ### Running Commands
 
 Run your DSL file:
@@ -201,6 +195,76 @@ Configuration:
 - Model: [gpt-4o-mini]
 - Action: [look through these company names and identify which ones seem like startups]
 - Output: [STDOUT]
+```
+
+### Example YAML Files
+
+The project includes several example YAML files demonstrating different use cases:
+
+#### 1. OpenAI Multi-Step Example (openai-example.yaml)
+```yaml
+step_one:
+  input:
+    - examples/example_filename.txt
+  model:
+    - gpt-4o-mini
+  action:
+    - look through these company names and identify the top five which seem most likely to be startups
+  output:
+    - STDOUT
+
+step_two:
+  input:
+    - STDIN
+  model:
+    - gpt-4o
+  action:
+    - for each of these company names provide a snappy tagline that would make them stand out
+  output:
+    - STDOUT
+```
+This example shows how to chain multiple steps together, where the output of the first step (STDOUT) becomes the input of the second step (STDIN). To run:
+```bash
+comanda process examples/openai-example.yaml
+```
+
+#### 2. Image Analysis Example (image-example.yaml)
+```yaml
+step:
+  input: examples/image.jpeg
+  model: gpt-4o
+  action: "Analyze this screenshot and describe what you see in detail."
+  output: STDOUT
+```
+This example demonstrates how to analyze an image file using a vision-capable model. To run:
+```bash
+comanda process examples/image-example.yaml
+```
+
+#### 3. Screenshot Analysis Example (screenshot-example.yaml)
+```yaml
+step:
+  input: screenshot
+  model: gpt-4o
+  action: "Analyze this screenshot and describe what you see in detail."
+  output: STDOUT
+```
+This example shows how to capture and analyze the current screen state. To run:
+```bash
+comanda process examples/screenshot-example.yaml
+```
+
+#### 4. Local Model Example (ollama-example.yaml)
+```yaml
+step:
+  input: examples/example_filename.txt
+  model: llama2
+  action: look through these company names and identify the top five which seem most likely in the HVAC business
+  output: STDOUT
+```
+This example demonstrates using a local model through Ollama. Make sure you have Ollama installed and the specified model pulled before running:
+```bash
+comanda process examples/ollama-example.yaml
 ```
 
 ## Project Structure
