@@ -2,6 +2,7 @@ package processor
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,108 @@ func TestNewProcessor(t *testing.T) {
 
 	if processor.providers == nil {
 		t.Error("NewProcessor() did not initialize providers map")
+	}
+}
+
+func TestValidateStepConfig(t *testing.T) {
+	processor := NewProcessor(&DSLConfig{}, createTestEnvConfig(), false)
+
+	tests := []struct {
+		name          string
+		stepName      string
+		config        StepConfig
+		expectedError string
+	}{
+		{
+			name:     "valid config",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "test.txt",
+				Model:  "gpt-4",
+				Action: "analyze",
+				Output: "STDOUT",
+			},
+			expectedError: "",
+		},
+		{
+			name:     "missing input tag",
+			stepName: "test_step",
+			config: StepConfig{
+				Model:  "gpt-4",
+				Action: "analyze",
+				Output: "STDOUT",
+			},
+			expectedError: "input tag is required",
+		},
+		{
+			name:     "missing model",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "test.txt",
+				Action: "analyze",
+				Output: "STDOUT",
+			},
+			expectedError: "model is required",
+		},
+		{
+			name:     "missing action",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "test.txt",
+				Model:  "gpt-4",
+				Output: "STDOUT",
+			},
+			expectedError: "action is required",
+		},
+		{
+			name:     "missing output",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "test.txt",
+				Model:  "gpt-4",
+				Action: "analyze",
+			},
+			expectedError: "output is required",
+		},
+		{
+			name:     "empty input allowed",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "",
+				Model:  "gpt-4",
+				Action: "analyze",
+				Output: "STDOUT",
+			},
+			expectedError: "",
+		},
+		{
+			name:     "NA input allowed",
+			stepName: "test_step",
+			config: StepConfig{
+				Input:  "NA",
+				Model:  "gpt-4",
+				Action: "analyze",
+				Output: "STDOUT",
+			},
+			expectedError: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := processor.validateStepConfig(tt.stepName, tt.config)
+			if tt.expectedError == "" {
+				if err != nil {
+					t.Errorf("validateStepConfig() returned unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Error("validateStepConfig() expected error but got none")
+				} else if !strings.Contains(err.Error(), tt.expectedError) {
+					t.Errorf("validateStepConfig() error = %v, want error containing %v", err, tt.expectedError)
+				}
+			}
+		})
 	}
 }
 

@@ -53,6 +53,40 @@ func (p *Processor) debugf(format string, args ...interface{}) {
 	}
 }
 
+// validateStepConfig checks if all required fields are present in a step
+func (p *Processor) validateStepConfig(stepName string, config StepConfig) error {
+	var errors []string
+
+	// Check input field exists (can be empty or NA, but must be present)
+	if config.Input == nil {
+		errors = append(errors, "input tag is required (can be NA or empty, but the tag must be present)")
+	}
+
+	// Check model field
+	modelNames := p.NormalizeStringSlice(config.Model)
+	if len(modelNames) == 0 {
+		errors = append(errors, "model is required and must specify a valid model name")
+	}
+
+	// Check action field
+	actions := p.NormalizeStringSlice(config.Action)
+	if len(actions) == 0 {
+		errors = append(errors, "action is required")
+	}
+
+	// Check output field
+	outputs := p.NormalizeStringSlice(config.Output)
+	if len(outputs) == 0 {
+		errors = append(errors, "output is required (can be STDOUT for console output)")
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("validation errors in step '%s':\n- %s", stepName, strings.Join(errors, "\n- "))
+	}
+
+	return nil
+}
+
 // NormalizeStringSlice converts interface{} to []string
 func (p *Processor) NormalizeStringSlice(val interface{}) []string {
 	p.debugf("Normalizing value type: %T", val)
@@ -89,6 +123,13 @@ func (p *Processor) Process() error {
 
 	if len(*p.config) == 0 {
 		return fmt.Errorf("no steps defined in DSL configuration")
+	}
+
+	// First validate all steps before processing
+	for stepName, stepConfig := range *p.config {
+		if err := p.validateStepConfig(stepName, stepConfig); err != nil {
+			return err
+		}
 	}
 
 	for stepName, stepConfig := range *p.config {
