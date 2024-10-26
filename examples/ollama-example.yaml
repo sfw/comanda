@@ -1,9 +1,5 @@
-input:
-  - example_filename.txt
-model:
-  - llama3.2
-action:
-  - look through these company names and identify the top five which seem most likely to be startups
-output:
-  - STDOUT
-
+step:
+  input: examples/example_filename.txt
+  model: llama2
+  action: look through these company names and identify the top five which seem most likely in the HVAC business
+  output: STDOUT
