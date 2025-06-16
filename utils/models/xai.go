@@ -290,3 +290,23 @@ func (x *XAIProvider) GetConfig() ModelConfig {
 func (x *XAIProvider) SetVerbose(verbose bool) {
 	x.verbose = verbose
 }
+
+// ListModels returns the list of available XAI models
+func (x *XAIProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(x.Name(), x.apiKey)
+}
+
+// Register the XAI provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewXAIProvider() },
+		ProviderMetadata{
+			Name:          "xai",
+			Description:   "X.AI Grok models (grok-beta, grok-vision-beta, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{"grok-"},
+			Priority:      75, // Medium-high priority for Grok models
+		},
+	)
+	RegisterProvider("xai", factory)
+}

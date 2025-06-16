@@ -251,3 +251,23 @@ func (d *DeepseekProvider) GetConfig() ModelConfig {
 func (d *DeepseekProvider) SetVerbose(verbose bool) {
 	d.verbose = verbose
 }
+
+// ListModels returns the list of available Deepseek models
+func (d *DeepseekProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(d.Name(), d.apiKey)
+}
+
+// Register the Deepseek provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewDeepseekProvider() },
+		ProviderMetadata{
+			Name:          "deepseek",
+			Description:   "Deepseek models (deepseek-chat, deepseek-coder, deepseek-reasoner, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{"deepseek-"},
+			Priority:      70, // Medium priority for Deepseek models
+		},
+	)
+	RegisterProvider("deepseek", factory)
+}

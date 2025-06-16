@@ -198,3 +198,23 @@ func (o *OllamaProvider) SendPromptWithFile(modelName string, prompt string, fil
 func (o *OllamaProvider) SetVerbose(verbose bool) {
 	o.verbose = verbose
 }
+
+// ListModels returns the list of available Ollama models
+func (o *OllamaProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(o.Name(), "") // Ollama doesn't need an API key
+}
+
+// Register the Ollama provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewOllamaProvider() },
+		ProviderMetadata{
+			Name:          "ollama",
+			Description:   "Ollama local models (llama2, mistral, codellama, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{}, // Empty - catches all unmatched models
+			Priority:      10,         // Lowest priority - fallback provider
+		},
+	)
+	RegisterProvider("ollama", factory)
+}

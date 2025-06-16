@@ -1,7 +1,10 @@
 package models
 
 import (
+	"strings"
+
 	"github.com/kris-hansen/comanda/utils/config"
+	"github.com/kris-hansen/comanda/utils/discovery"
 )
 
 // ModelConfig represents configuration options for model calls
@@ -40,6 +43,7 @@ type Provider interface {
 	SendPromptWithFile(modelName string, prompt string, file FileInput) (string, error)
 	Configure(apiKey string) error
 	SetVerbose(verbose bool)
+	ListModels() ([]string, error) // Dynamic model listing when supported
 }
 
 // ResponsesStreamHandler defines callbacks for streaming responses
@@ -59,6 +63,14 @@ type ResponsesProvider interface {
 	SendPromptWithResponsesStream(config ResponsesConfig, handler ResponsesStreamHandler) error
 }
 
+// ListModelsForProvider is a generic function that all providers can use to list their models
+// It delegates to the discovery module which handles caching and API calls
+func ListModelsForProvider(providerName string, apiKey string) ([]string, error) {
+	// Convert provider name to lowercase to match discovery module expectations
+	normalizedName := strings.ToLower(providerName)
+	return discovery.GetAvailableModels(normalizedName, apiKey)
+}
+
 // DetectProviderFunc is the type for the provider detection function
 type DetectProviderFunc func(modelName string) Provider
 
@@ -69,22 +81,12 @@ var DetectProvider DetectProviderFunc = defaultDetectProvider
 func defaultDetectProvider(modelName string) Provider {
 	config.DebugLog("[Provider] Attempting to detect provider for model: %s", modelName)
 
-	// Order providers from most specific to most general
-	providers := []Provider{
-		NewGoogleProvider(),    // Handles gemini- models
-		NewAnthropicProvider(), // Handles claude- models
-		NewXAIProvider(),       // Handles grok- models
-		NewDeepseekProvider(),  // Handles deepseek- models
-		NewOpenAIProvider(),    // Handles gpt- models
-		NewOllamaProvider(),    // Handles remaining models
+	provider := registry.FindProvider(modelName)
+	if provider != nil {
+		config.DebugLog("[Provider] Found provider %s for model %s", provider.Name(), modelName)
+		return provider
 	}
 
-	for _, provider := range providers {
-		if provider.SupportsModel(modelName) {
-			config.DebugLog("[Provider] Found provider %s for model %s", provider.Name(), modelName)
-			return provider
-		}
-	}
 	config.DebugLog("[Provider] No provider found for model %s", modelName)
 	return nil
 }

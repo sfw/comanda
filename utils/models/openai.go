@@ -344,6 +344,11 @@ func (o *OpenAIProvider) SetVerbose(verbose bool) {
 	o.verbose = verbose
 }
 
+// ListModels returns the list of available models from OpenAI
+func (o *OpenAIProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(o.Name(), o.apiKey)
+}
+
 // prepareResponsesRequestBody prepares the request body for the Responses API
 func (o *OpenAIProvider) prepareResponsesRequestBody(config ResponsesConfig) (map[string]interface{}, error) {
 	// Build the request body
@@ -618,9 +623,7 @@ func (o *OpenAIProvider) SendPromptWithResponsesStream(config ResponsesConfig, h
 		}
 
 		// Skip "data: " prefix
-		if strings.HasPrefix(line, "data: ") {
-			line = strings.TrimPrefix(line, "data: ")
-		}
+		line = strings.TrimPrefix(line, "data: ")
 
 		// Skip "[DONE]" message
 		if line == "[DONE]" {
@@ -859,4 +862,19 @@ func (o *OpenAIProvider) recursiveExtractText(data interface{}) string {
 	}
 
 	return result.String()
+}
+
+// Register the OpenAI provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewOpenAIProvider() },
+		ProviderMetadata{
+			Name:          "openai",
+			Description:   "OpenAI GPT models (gpt-4, gpt-3.5-turbo, o1-, o3-, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{"gpt-", "o1-", "o3-"},
+			Priority:      85, // High priority for GPT models
+		},
+	)
+	RegisterProvider("openai", factory)
 }

@@ -216,3 +216,23 @@ func (g *GoogleProvider) SendPromptWithFile(modelName string, prompt string, fil
 func (g *GoogleProvider) SetVerbose(verbose bool) {
 	g.verbose = verbose
 }
+
+// ListModels returns the list of available Google models
+func (g *GoogleProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(g.Name(), g.apiKey)
+}
+
+// Register the Google provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewGoogleProvider() },
+		ProviderMetadata{
+			Name:          "google",
+			Description:   "Google Gemini models (gemini-pro, gemini-1.5-pro, gemini-2.0-flash, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{"gemini-"},
+			Priority:      80, // High priority for Gemini models
+		},
+	)
+	RegisterProvider("google", factory)
+}

@@ -381,3 +381,23 @@ func (a *AnthropicProvider) GetConfig() ModelConfig {
 func (a *AnthropicProvider) SetVerbose(verbose bool) {
 	a.verbose = verbose
 }
+
+// ListModels returns the list of available Anthropic models
+func (a *AnthropicProvider) ListModels() ([]string, error) {
+	return ListModelsForProvider(a.Name(), a.apiKey)
+}
+
+// Register the Anthropic provider on package initialization
+func init() {
+	factory := NewProviderFactory(
+		func() Provider { return NewAnthropicProvider() },
+		ProviderMetadata{
+			Name:          "anthropic",
+			Description:   "Anthropic Claude models (claude-3.5-sonnet, claude-3-haiku, etc.)",
+			Version:       "1.0.0",
+			ModelPrefixes: []string{"claude-"},
+			Priority:      90, // High priority for claude- models
+		},
+	)
+	RegisterProvider("anthropic", factory)
+}

@@ -75,6 +75,10 @@ func (m *MockProvider) SetVerbose(verbose bool) {
 	m.verbose = verbose
 }
 
+func (m *MockProvider) ListModels() ([]string, error) {
+	return []string{"test-model-1", "test-model-2"}, nil
+}
+
 func init() {
 	// Override the default provider detection for testing
 	originalDetectProvider := models.DetectProvider

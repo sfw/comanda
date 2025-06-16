@@ -108,3 +108,7 @@ func (m *MockProvider) SendPromptWithFile(model, prompt string, file models.File
 func (m *MockProvider) SetVerbose(verbose bool) {
 	m.verbose = verbose
 }
+
+func (m *MockProvider) ListModels() ([]string, error) {
+	return []string{"test-model-1", "test-model-2"}, nil
+}
