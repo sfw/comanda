@@ -3,13 +3,11 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -34,101 +32,145 @@ var (
 // Green checkmark for successful operations
 const greenCheckmark = "\u2705"
 
+// Primary OpenAI models based on the latest o-series and flagship models
+var primaryOpenAIModels = []string{
+	"gpt-4o",               // Appears first in user's list
+	"gpt-4o-audio-preview", // Appears second
+	"o1",                   // Appears third
+	"o3-mini",              // Appears fourth
+	"o1-pro",               // Appears fifth
+	"o4-mini",              // Appears sixth
+	"gpt-4.1",              // Appears seventh
+	// Models from the image that might not be returned by ListModels API
+	"o3-pro",            // Responses API only model
+	"o3",                // Base model
+	"chatgpt-4o-latest", // ChatGPT variant
+}
+
+// Patterns for unsupported model types that should be excluded from selection
+var unsupportedModelPatterns = []string{
+	"dall-e",      // Image generation
+	"tts-",        // Text-to-speech
+	"whisper-",    // Speech-to-text
+	"embedding",   // Text embeddings
+	"moderation",  // Content moderation
+	"babbage-002", // Older completion models
+	"davinci-002", // Older completion models
+}
+
 type OllamaModel struct {
 	Name    string `json:"name"`
 	ModTime string `json:"modified_at"`
 	Size    int64  `json:"size"`
 }
 
+// isUnsupportedModel checks if a model should be excluded from selection
+func isUnsupportedModel(modelName string) bool {
+	modelName = strings.ToLower(modelName)
+
+	// Check against unsupported patterns
+	for _, pattern := range unsupportedModelPatterns {
+		if strings.Contains(modelName, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isPrimaryOpenAIModel checks if a model is in the primary models list
+func isPrimaryOpenAIModel(modelName string) bool {
+	for _, primaryModel := range primaryOpenAIModels {
+		if primaryModel == modelName {
+			return true
+		}
+	}
+	return false
+}
+
+// getOpenAIModelsAndCategorize fetches and categorizes OpenAI models
+func getOpenAIModelsAndCategorize(apiKey string) ([]string, []string, error) {
+	client := openai.NewClient(apiKey)
+	modelsList, err := client.ListModels(context.Background())
+
+	// Create a map of models from API for quick lookup
+	apiModels := make(map[string]bool)
+	if err == nil {
+		for _, model := range modelsList.Models {
+			apiModels[model.ID] = true
+		}
+	} else {
+		fmt.Printf("Warning: Could not fetch models from OpenAI API: %v\nFalling back to known models.\n", err)
+	}
+
+	var primaryModels []string
+	var otherModels []string
+	processedModels := make(map[string]bool)
+
+	// First, process primary models in the order they're defined
+	for _, modelID := range primaryOpenAIModels {
+		// Skip unsupported models
+		if isUnsupportedModel(modelID) {
+			continue
+		}
+
+		// Check if the model is supported by our backend using registry
+		provider := models.DetectProvider(modelID)
+		if provider == nil || !provider.SupportsModel(modelID) {
+			continue
+		}
+
+		// Add to primary models list
+		primaryModels = append(primaryModels, modelID)
+		processedModels[modelID] = true
+	}
+
+	// Then process any other models from the API
+	if err == nil {
+		for _, model := range modelsList.Models {
+			modelID := model.ID
+
+			// Skip if already processed as primary
+			if processedModels[modelID] {
+				continue
+			}
+
+			// Skip unsupported models
+			if isUnsupportedModel(modelID) {
+				continue
+			}
+
+			// Check if the model is supported by our backend using registry
+			provider := models.DetectProvider(modelID)
+			if provider == nil || !provider.SupportsModel(modelID) {
+				continue
+			}
+
+			// Add to other models list
+			otherModels = append(otherModels, modelID)
+		}
+
+		// Sort other models alphabetically
+		sort.Strings(otherModels)
+	}
+
+	return primaryModels, otherModels, nil
+}
+
+// getOpenAIModels is kept for backward compatibility
 func getOpenAIModels(apiKey string) ([]string, error) {
 	client := openai.NewClient(apiKey)
-	models, err := client.ListModels(context.Background())
+	modelsList, err := client.ListModels(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("error fetching OpenAI models: %v", err)
 	}
 
 	var allModels []string
-	for _, model := range models.Models {
+	for _, model := range modelsList.Models {
 		allModels = append(allModels, model.ID)
 	}
 
 	return allModels, nil
-}
-
-func getAnthropicModels() []string {
-	return []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-5-sonnet-latest",
-		"claude-3-5-haiku-latest",
-		"claude-3-7-sonnet-20250219",
-		"claude-3-7-sonnet-latest",
-		"claude-3-5-haiku-20241022",
-		"claude-opus-4-20250514",
-		"claude-sonnet-4-20250514",
-	}
-}
-
-func getXAIModels() []string {
-	return []string{
-		"grok-beta",
-		"grok-vision-beta",
-	}
-}
-
-func getDeepseekModels() []string {
-	return []string{
-		"deepseek-chat",
-		"deepseek-coder",
-		"deepseek-vision",
-		"deepseek-reasoner",
-	}
-}
-
-func getGoogleModels() []string {
-	// List based on user input and existing models, matching utils/models/google.go
-	return []string{
-		// From user input
-		"gemini-2.5-pro-exp-03-25",
-		"gemini-2.0-flash",
-		"gemini-2.0-flash-lite",
-		"gemini-1.5-flash",
-		"gemini-1.5-flash-8b",
-		"gemini-1.5-pro",
-		"gemini-2.5-pro-preview-03-25", // Added new model
-		"gemini-2.5-pro-preview-05-06", // Added new model
-		"gemini-embedding-exp",
-
-		// Existing models not explicitly in user list but kept for compatibility/completeness
-		"gemini-1.0-pro",
-		"gemini-2.0-flash-exp",                // Experimental version
-		"gemini-2.0-flash-001",                // Specific version
-		"gemini-2.0-pro-exp-02-05",            // Experimental version
-		"gemini-2.0-flash-lite-preview-02-05", // Preview version
-		"gemini-2.0-flash-thinking-exp-01-21", // Experimental version
-		"aqa",                                 // Attributed Question Answering model
-	}
-}
-
-func getOllamaModels() ([]OllamaModel, error) {
-	resp, err := http.Get("http://localhost:11434/api/tags")
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to Ollama API: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Ollama API error (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var models struct {
-		Models []OllamaModel `json:"models"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&models); err != nil {
-		return nil, fmt.Errorf("error decoding Ollama response: %v", err)
-	}
-
-	return models.Models, nil
 }
 
 func checkOllamaInstalled() bool {
@@ -324,6 +366,74 @@ func promptForModelSelection(models []string) ([]string, error) {
 		selectedModels := make([]string, len(selected))
 		for i, num := range selected {
 			selectedModels[i] = models[num-1]
+		}
+
+		return selectedModels, nil
+	}
+}
+
+// promptForOpenAIModelSelection handles the paginated selection of OpenAI models
+func promptForOpenAIModelSelection(primaryModels []string, otherModels []string) ([]string, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	// Display primary models first
+	fmt.Println("\nPrimary OpenAI Models:")
+	for i, model := range primaryModels {
+		fmt.Printf("%d. %s\n", i+1, model)
+	}
+
+	// Combined list for selection validation
+	allModels := append([]string{}, primaryModels...)
+	allModels = append(allModels, otherModels...)
+
+	// Track which page we're on
+	showingPrimary := true
+
+	for {
+		var prompt string
+		if showingPrimary && len(otherModels) > 0 {
+			prompt = "\nEnter model numbers, or 'm' to see more models: "
+		} else {
+			prompt = "\nEnter model numbers, or 'p' to see primary models: "
+		}
+
+		fmt.Print(prompt)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		// Handle pagination
+		if input == "m" && showingPrimary {
+			showingPrimary = false
+			fmt.Println("\nOther OpenAI Models:")
+			for i, model := range otherModels {
+				fmt.Printf("%d. %s\n", i+len(primaryModels)+1, model)
+			}
+			continue
+		} else if input == "p" && !showingPrimary {
+			showingPrimary = true
+			fmt.Println("\nPrimary OpenAI Models:")
+			for i, model := range primaryModels {
+				fmt.Printf("%d. %s\n", i+1, model)
+			}
+			continue
+		}
+
+		// Parse selection
+		selected, err := parseModelSelection(input, len(allModels))
+		if err != nil {
+			fmt.Printf("Error: %v\nPlease try again.\n", err)
+			continue
+		}
+
+		if len(selected) == 0 {
+			fmt.Println("No valid selections made. Please try again.")
+			continue
+		}
+
+		// Convert selected numbers to model names
+		selectedModels := make([]string, len(selected))
+		for i, num := range selected {
+			selectedModels[i] = allModels[num-1]
 		}
 
 		return selectedModels, nil
@@ -625,26 +735,43 @@ var configureCmd = &cobra.Command{
 				return
 			}
 
-			// Get models using the registry system
-			modelList, err := models.ListModelsForProvider(provider, apiKey)
-			if err != nil {
-				fmt.Printf("Error fetching models for %s: %v\n", provider, err)
-				return
-			}
-
-			if len(modelList) == 0 {
-				if provider == "ollama" {
-					fmt.Println("No models found. Please pull a model first using 'ollama pull <model>'")
-				} else {
-					fmt.Printf("No models found for %s provider\n", provider)
+			// Special handling for OpenAI to use categorized model selection
+			if provider == "openai" {
+				// Fetch and categorize OpenAI models
+				primaryModels, otherModels, err := getOpenAIModelsAndCategorize(apiKey)
+				if err != nil {
+					fmt.Printf("Error fetching OpenAI models: %v\n", err)
+					return
 				}
-				return
-			}
 
-			selectedModels, err = promptForModelSelection(modelList)
-			if err != nil {
-				fmt.Printf("Error selecting models: %v\n", err)
-				return
+				// Use the paginated selection for OpenAI
+				selectedModels, err = promptForOpenAIModelSelection(primaryModels, otherModels)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
+			} else {
+				// Use the registry system for all other providers
+				modelList, err := models.ListModelsForProvider(provider, apiKey)
+				if err != nil {
+					fmt.Printf("Error fetching models for %s: %v\n", provider, err)
+					return
+				}
+
+				if len(modelList) == 0 {
+					if provider == "ollama" {
+						fmt.Println("No models found. Please pull a model first using 'ollama pull <model>'")
+					} else {
+						fmt.Printf("No models found for %s provider\n", provider)
+					}
+					return
+				}
+
+				selectedModels, err = promptForModelSelection(modelList)
+				if err != nil {
+					fmt.Printf("Error selecting models: %v\n", err)
+					return
+				}
 			}
 
 			// Add new models to provider
