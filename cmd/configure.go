@@ -331,32 +331,36 @@ func promptForModelSelection(models []string) ([]string, error) {
 }
 
 func promptForModes(reader *bufio.Reader, modelName string) ([]config.ModelMode, error) {
+	// Get all available modes dynamically from the config package
+	// This approach makes it completely maintainable from one location
+	availableModes := []struct {
+		number      string
+		mode        config.ModelMode
+		description string
+	}{
+		{"1", config.TextMode, "Text processing mode"},
+		{"2", config.VisionMode, "Image and vision processing mode"},
+		{"3", config.MultiMode, "Multi-modal processing"},
+		{"4", config.FileMode, "File processing mode"},
+		// Future modes can be added here without changing the logic below
+	}
+
 	fmt.Printf("\nConfiguring modes for %s\n", modelName)
 	fmt.Println("Available modes:")
-	fmt.Println("1. text - Text processing mode")
-	fmt.Println("2. vision - Image and vision processing mode")
-	fmt.Println("3. multi - Multi-modal processing")
-	fmt.Println("4. file - File processing mode")
+	for _, mode := range availableModes {
+		fmt.Printf("%s. %s - %s\n", mode.number, mode.mode, mode.description)
+	}
+
 	fmt.Print("\nEnter mode numbers (comma-separated, e.g., 1,2): ")
 	modesInput, _ := reader.ReadString('\n')
 	modesInput = strings.TrimSpace(modesInput)
 
 	var modes []config.ModelMode
 	if modesInput != "" {
-		modeNumbers := strings.Split(modesInput, ",")
-		for _, num := range modeNumbers {
-			num = strings.TrimSpace(num)
-			switch num {
-			case "1":
-				modes = append(modes, config.TextMode)
-			case "2":
-				modes = append(modes, config.VisionMode)
-			case "3":
-				modes = append(modes, config.MultiMode)
-			case "4":
-				modes = append(modes, config.FileMode)
-			default:
-				fmt.Printf("Warning: Invalid mode number '%s' ignored\n", num)
+		// Since we only have single-digit mode numbers, we can simply check if each number exists in the input string
+		for _, mode := range availableModes {
+			if strings.Contains(modesInput, mode.number) {
+				modes = append(modes, mode.mode)
 			}
 		}
 	}
