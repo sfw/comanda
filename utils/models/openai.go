@@ -1,3 +1,5 @@
+//go:build openai || all
+
 package models
 
 import (

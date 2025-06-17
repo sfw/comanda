@@ -1,3 +1,5 @@
+//go:build google || all
+
 package models
 
 import (

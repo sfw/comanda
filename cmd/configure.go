@@ -15,6 +15,7 @@ import (
 
 	"github.com/kris-hansen/comanda/utils/config"
 	"github.com/kris-hansen/comanda/utils/database"
+	"github.com/kris-hansen/comanda/utils/models"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 )
@@ -548,16 +549,40 @@ var configureCmd = &cobra.Command{
 			fmt.Printf("%s Default generation model set to '%s'\n", greenCheckmark, selectedDefaultModel)
 		} else {
 			reader := bufio.NewReader(os.Stdin)
-			// Prompt for provider
+
+			// Get available providers from registry
+			availableProviders := models.ListRegisteredProviders()
+			if len(availableProviders) == 0 {
+				fmt.Println("Error: No providers available in this build")
+				return
+			}
+
 			var provider string
-			for {
-				fmt.Print("Enter provider (openai/anthropic/ollama/google/xai/deepseek): ")
-				provider, _ = reader.ReadString('\n')
-				provider = strings.TrimSpace(provider)
-				if provider == "openai" || provider == "anthropic" || provider == "ollama" || provider == "google" || provider == "xai" || provider == "deepseek" {
-					break
+			if len(availableProviders) == 1 {
+				// Auto-select the only available provider
+				provider = availableProviders[0]
+				fmt.Printf("🎯 This build only includes the '%s' provider. Auto-selecting.\n", provider)
+			} else {
+				// Prompt for provider selection from available providers
+				fmt.Printf("Available providers in this build: %s\n", strings.Join(availableProviders, ", "))
+				for {
+					fmt.Printf("Enter provider (%s): ", strings.Join(availableProviders, "/"))
+					provider, _ = reader.ReadString('\n')
+					provider = strings.TrimSpace(provider)
+
+					// Check if provider is in available list
+					found := false
+					for _, p := range availableProviders {
+						if provider == p {
+							found = true
+							break
+						}
+					}
+					if found {
+						break
+					}
+					fmt.Printf("Invalid provider. Please enter one of: %s\n", strings.Join(availableProviders, ", "))
 				}
-				fmt.Println("Invalid provider. Please enter 'openai', 'anthropic', 'ollama', 'google', 'xai', or 'deepseek'")
 			}
 
 			// Special handling for ollama provider
@@ -589,90 +614,33 @@ var configureCmd = &cobra.Command{
 
 			// Get available models based on provider
 			var selectedModels []string
-			switch provider {
-			case "openai":
-				if apiKey == "" {
-					fmt.Println("Error: API key is required for OpenAI")
-					return
-				}
-				models, err := getOpenAIModels(apiKey)
-				if err != nil {
-					fmt.Printf("Error fetching OpenAI models: %v\n", err)
-					return
-				}
-				selectedModels, err = promptForModelSelection(models)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
 
-			case "anthropic":
-				if apiKey == "" {
-					fmt.Println("Error: API key is required for Anthropic")
-					return
-				}
-				models := getAnthropicModels()
-				selectedModels, err = promptForModelSelection(models)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
+			// Check if API key is required for this provider (all except ollama)
+			if provider != "ollama" && apiKey == "" {
+				fmt.Printf("Error: API key is required for %s\n", provider)
+				return
+			}
 
-			case "xai":
-				if apiKey == "" {
-					fmt.Println("Error: API key is required for X.AI")
-					return
-				}
-				models := getXAIModels()
-				selectedModels, err = promptForModelSelection(models)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
+			// Get models using the registry system
+			modelList, err := models.ListModelsForProvider(provider, apiKey)
+			if err != nil {
+				fmt.Printf("Error fetching models for %s: %v\n", provider, err)
+				return
+			}
 
-			case "deepseek":
-				if apiKey == "" {
-					fmt.Println("Error: API key is required for Deepseek")
-					return
-				}
-				models := getDeepseekModels()
-				selectedModels, err = promptForModelSelection(models)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
-
-			case "google":
-				if apiKey == "" {
-					fmt.Println("Error: API key is required for Google")
-					return
-				}
-				models := getGoogleModels()
-				selectedModels, err = promptForModelSelection(models)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
-
-			case "ollama":
-				models, err := getOllamaModels()
-				if err != nil {
-					fmt.Printf("Error fetching Ollama models: %v\n", err)
-					return
-				}
-				modelNames := make([]string, len(models))
-				for i, model := range models {
-					modelNames[i] = model.Name
-				}
-				if len(modelNames) == 0 {
+			if len(modelList) == 0 {
+				if provider == "ollama" {
 					fmt.Println("No models found. Please pull a model first using 'ollama pull <model>'")
-					return
+				} else {
+					fmt.Printf("No models found for %s provider\n", provider)
 				}
-				selectedModels, err = promptForModelSelection(modelNames)
-				if err != nil {
-					fmt.Printf("Error selecting models: %v\n", err)
-					return
-				}
+				return
+			}
+
+			selectedModels, err = promptForModelSelection(modelList)
+			if err != nil {
+				fmt.Printf("Error selecting models: %v\n", err)
+				return
 			}
 
 			// Add new models to provider

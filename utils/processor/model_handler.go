@@ -192,20 +192,8 @@ func (p *Processor) configureProviders() error {
 		var providerConfig *config.Provider
 		var err error
 
-		switch providerName {
-		case "anthropic":
-			providerConfig, err = p.envConfig.GetProviderConfig("anthropic")
-		case "openai":
-			providerConfig, err = p.envConfig.GetProviderConfig("openai")
-		case "google":
-			providerConfig, err = p.envConfig.GetProviderConfig("google")
-		case "xai":
-			providerConfig, err = p.envConfig.GetProviderConfig("xai")
-		case "deepseek":
-			providerConfig, err = p.envConfig.GetProviderConfig("deepseek")
-		default:
-			return fmt.Errorf("unknown provider: %s", providerName)
-		}
+		// Get provider configuration directly by name instead of using hardcoded switch
+		providerConfig, err = p.envConfig.GetProviderConfig(providerName)
 
 		if err != nil {
 			return fmt.Errorf("failed to get config for provider %s: %w", providerName, err)

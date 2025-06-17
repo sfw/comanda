@@ -1,3 +1,5 @@
+//go:build deepseek || all
+
 package models
 
 import (

@@ -1,3 +1,5 @@
+//go:build ollama || all
+
 package models
 
 import (

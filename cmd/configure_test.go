@@ -15,13 +15,16 @@ func TestModelConsistency(t *testing.T) {
 		configModels := getGoogleModels()
 		sort.Strings(configModels)
 
-		// Get models from provider
-		provider := models.NewGoogleProvider()
+		// Get models from provider registry
+		provider := models.GetProviderByName("google")
+		if provider == nil {
+			t.Skip("Google provider not available in this build")
+		}
 
 		// Get all models that are valid in provider
 		providerModels := make([]string, 0)
 		for _, model := range configModels {
-			if provider.ValidateModel(model) {
+			if provider.SupportsModel(model) {
 				providerModels = append(providerModels, model)
 			} else {
 				t.Errorf("Model %s is available in configure but not valid in GoogleProvider", model)

@@ -1,3 +1,5 @@
+//go:build anthropic || all
+
 package models
 
 import (

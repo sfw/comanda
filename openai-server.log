@@ -1,0 +1,5 @@
+Starting server on port 8080...
+Data directory: data
+Runtime directories can be specified with the runtimeDir query parameter
+Example usage: curl 'http://localhost:8080/process?filename=examples/openai-example.yaml'
+2025/06/17 12:13:20 Request: method=GET path=/providers query= auth=Bearer ******** status=200 duration=70.334µs

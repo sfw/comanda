@@ -31,28 +31,17 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 
 	providers := []ProviderInfo{}
 
-	// Get provider instances
-	providerList := []struct {
-		name     string
-		provider models.Provider
-	}{
-		{"openai", models.NewOpenAIProvider()},
-		{"anthropic", models.NewAnthropicProvider()},
-		{"google", models.NewGoogleProvider()},
-		{"xai", models.NewXAIProvider()},
-		{"ollama", models.NewOllamaProvider()},
-	}
+	// Get available providers from registry (only compiled-in providers)
+	availableProviders := models.GetAvailableProviders()
 
 	// Get provider configurations
-	for _, p := range providerList {
-		if p.provider != nil {
-			if provider, err := s.envConfig.GetProviderConfig(p.name); err == nil {
-				providers = append(providers, ProviderInfo{
-					Name:    p.name,
-					Models:  getModelNames(provider.Models),
-					Enabled: provider.APIKey != "",
-				})
-			}
+	for _, metadata := range availableProviders {
+		if provider, err := s.envConfig.GetProviderConfig(metadata.Name); err == nil {
+			providers = append(providers, ProviderInfo{
+				Name:    metadata.Name,
+				Models:  getModelNames(provider.Models),
+				Enabled: provider.APIKey != "",
+			})
 		}
 	}
 
@@ -104,10 +93,11 @@ func (s *Server) handleGetAvailableModels(w http.ResponseWriter, r *http.Request
 	apiKey := ""
 	if err == nil { // Provider exists, get its key
 		apiKey = providerConfig.APIKey
-	} else if providerName != "ollama" && providerName != "anthropic" && providerName != "google" && providerName != "xai" && providerName != "deepseek" {
-		// If provider doesn't exist and requires a key, we can't proceed
-		sendJSONError(w, http.StatusBadRequest, fmt.Sprintf("Provider '%s' not configured or requires an API key to list models", providerName))
-		return
+	} else if providerName != "ollama" {
+		// Only ollama doesn't require an API key for model listing
+		// For other providers, if they're not configured, we can still try with empty key
+		// The discovery module will handle the error appropriately
+		apiKey = ""
 	}
 
 	// Fetch available models using the discovery package
@@ -307,19 +297,8 @@ func (s *Server) handleValidateProvider(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Create provider instance
-	var provider models.Provider
-	switch req.Name {
-	case "openai":
-		provider = models.NewOpenAIProvider()
-	case "anthropic":
-		provider = models.NewAnthropicProvider()
-	case "google":
-		provider = models.NewGoogleProvider()
-	case "xai":
-		provider = models.NewXAIProvider()
-	case "ollama":
-		provider = models.NewOllamaProvider()
-	default:
+	provider := models.GetProviderByName(req.Name)
+	if provider == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": fmt.Sprintf("Unknown provider: %s", req.Name),
@@ -389,19 +368,8 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Configure the provider with the new API key
-		var provider models.Provider
-		switch req.Name {
-		case "openai":
-			provider = models.NewOpenAIProvider()
-		case "anthropic":
-			provider = models.NewAnthropicProvider()
-		case "google":
-			provider = models.NewGoogleProvider()
-		case "xai":
-			provider = models.NewXAIProvider()
-		case "ollama":
-			provider = models.NewOllamaProvider()
-		default:
+		provider := models.GetProviderByName(req.Name)
+		if provider == nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
 				"error": fmt.Sprintf("Unknown provider: %s", req.Name),
@@ -409,14 +377,12 @@ func (s *Server) handleUpdateProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if provider != nil {
-			if err := provider.Configure(req.APIKey); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]string{
-					"error": fmt.Sprintf("Error configuring provider: %v", err),
-				})
-				return
-			}
+		if err := provider.Configure(req.APIKey); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": fmt.Sprintf("Error configuring provider: %v", err),
+			})
+			return
 		}
 	}
 
