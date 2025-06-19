@@ -105,7 +105,7 @@ func (p *Processor) handleOutput(modelName string, response string, outputs []st
 				errMsg := fmt.Sprintf("failed to write response to file %s: %v", outputPath, err)
 				p.debugf(errMsg)
 				fmt.Printf("ERROR: %s\n", errMsg)
-				return fmt.Errorf(errMsg)
+				return fmt.Errorf("%s", errMsg)
 			}
 			p.debugf("Response successfully written to file: %s", outputPath)
 

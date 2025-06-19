@@ -45,6 +45,24 @@ func (g *GoogleProvider) debugf(format string, args ...interface{}) {
 // ValidateModel checks if the specific Google model variant is valid
 func (g *GoogleProvider) ValidateModel(modelName string) bool {
 	g.debugf("Validating model: %s", modelName)
+
+	// Use dynamic model discovery if available
+	if g.apiKey != "" {
+		models, err := g.ListModels()
+		if err == nil {
+			modelName = strings.ToLower(modelName)
+			for _, valid := range models {
+				if strings.ToLower(valid) == modelName {
+					g.debugf("Found exact model match in dynamic list: %s", modelName)
+					return true
+				}
+			}
+		} else {
+			g.debugf("Failed to get dynamic model list, falling back to static list: %v", err)
+		}
+	}
+
+	// Fallback to static list if dynamic discovery fails or no API key
 	// List based on user input and existing models
 	validModels := []string{
 		// From user input
@@ -56,6 +74,7 @@ func (g *GoogleProvider) ValidateModel(modelName string) bool {
 		"gemini-1.5-pro",               // Also existing
 		"gemini-2.5-pro-preview-03-25", // Added new model
 		"gemini-2.5-pro-preview-05-06", // Added new model
+		"gemini-2.5-pro-preview-06-05", // Added missing model variant
 		"gemini-embedding-exp",
 
 		// Existing models not explicitly in user list but kept for compatibility/completeness

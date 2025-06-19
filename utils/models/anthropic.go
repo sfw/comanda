@@ -320,6 +320,26 @@ func (a *AnthropicProvider) SendPromptWithFile(modelName string, prompt string, 
 // ValidateModel checks if the specific Anthropic model variant is valid
 func (a *AnthropicProvider) ValidateModel(modelName string) bool {
 	a.debugf("Validating model: %s", modelName)
+
+	// Trim whitespace and convert to lowercase
+	modelName = strings.TrimSpace(strings.ToLower(modelName))
+
+	// Use dynamic model discovery if available
+	if a.apiKey != "" {
+		models, err := a.ListModels()
+		if err == nil {
+			for _, valid := range models {
+				if strings.ToLower(valid) == modelName {
+					a.debugf("Found exact model match in dynamic list: %s", modelName)
+					return true
+				}
+			}
+		} else {
+			a.debugf("Failed to get dynamic model list, falling back to static validation: %v", err)
+		}
+	}
+
+	// Fallback to static validation if dynamic discovery fails or no API key
 	validModels := []string{
 		"claude-3-5-sonnet-20241022",
 		"claude-3-5-sonnet-latest",
@@ -330,9 +350,6 @@ func (a *AnthropicProvider) ValidateModel(modelName string) bool {
 		"claude-opus-4-20250514",
 		"claude-sonnet-4-20250514",
 	}
-
-	// Trim whitespace and convert to lowercase
-	modelName = strings.TrimSpace(strings.ToLower(modelName))
 
 	// Add extra debug logging
 	a.debugf("Checking model '%s' against valid models: %v", modelName, validModels)

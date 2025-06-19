@@ -67,7 +67,7 @@ func checkOllamaModelExists(modelName string) (bool, error) {
 		availableModels[i] = m.Name
 	}
 	errMsg := fmt.Sprintf("model tag '%s' not found in local Ollama instance. Available models: %v. Try running 'ollama pull %s'", modelName, availableModels, modelName)
-	return false, fmt.Errorf(errMsg)
+	return false, fmt.Errorf("%s", errMsg)
 }
 
 // validateModel checks if the specified model is supported and has the required capabilities
@@ -91,7 +91,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		if provider == nil {
 			errMsg := fmt.Sprintf("unsupported model: %s (no provider found)", modelName)
 			p.debugf("Validation failed: %s", errMsg)
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("%s", errMsg)
 		}
 
 		// Check if the provider actually supports this model
@@ -99,7 +99,7 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		if !provider.SupportsModel(modelName) {
 			errMsg := fmt.Sprintf("unsupported model: %s (provider %s does not support it)", modelName, provider.Name())
 			p.debugf("Validation failed: %s", errMsg)
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("%s", errMsg)
 		}
 		p.debugf("Provider %s confirmed support for model %s", provider.Name(), modelName)
 
@@ -134,12 +134,12 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 			if strings.Contains(err.Error(), fmt.Sprintf("model %s not found for provider %s", modelName, providerName)) {
 				errMsg := fmt.Sprintf("model %s is supported by provider %s but is not enabled in your configuration. Use 'comanda configure' to add it.", modelName, providerName)
 				p.debugf("Configuration error: %s", errMsg)
-				return fmt.Errorf(errMsg)
+				return fmt.Errorf("%s", errMsg)
 			}
 			// Otherwise, return the original configuration error
 			errMsg := fmt.Sprintf("failed to get model configuration for %s: %v", modelName, err)
 			p.debugf("Configuration error: %s", errMsg)
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("%s", errMsg)
 		}
 		p.debugf("Successfully retrieved model configuration for %s", modelName)
 
@@ -166,8 +166,10 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 		}
 
 		provider.SetVerbose(p.verbose)
-		// Store provider by provider name instead of model name
+		// Store provider by provider name instead of model name (thread-safe)
+		p.providerMutex.Lock()
 		p.providers[provider.Name()] = provider
+		p.providerMutex.Unlock()
 		p.debugf("Model %s is supported by provider %s", modelName, provider.Name())
 	}
 	return nil
@@ -177,7 +179,15 @@ func (p *Processor) validateModel(modelNames []string, inputs []string) error {
 func (p *Processor) configureProviders() error {
 	p.debugf("Configuring providers")
 
-	for providerName, provider := range p.providers {
+	// Create a copy of providers map for safe iteration
+	p.providerMutex.RLock()
+	providersCopy := make(map[string]models.Provider)
+	for k, v := range p.providers {
+		providersCopy[k] = v
+	}
+	p.providerMutex.RUnlock()
+
+	for providerName, provider := range providersCopy {
 		p.debugf("Configuring provider %s", providerName)
 
 		// Handle Ollama provider separately since it doesn't need an API key, but expects "LOCAL"
@@ -225,5 +235,9 @@ func (p *Processor) GetModelProvider(modelName string) models.Provider {
 	if provider == nil {
 		return nil
 	}
+
+	// Thread-safe read access to providers map
+	p.providerMutex.RLock()
+	defer p.providerMutex.RUnlock()
 	return p.providers[provider.Name()]
 }

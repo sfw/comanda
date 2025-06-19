@@ -1,19 +1,21 @@
-step_one:
-  input: examples/test.csv
-  model: gpt-4o-mini
-  action: "Analyze this CSV file and list the key points."
-  output: examples/points1.txt
+parallel-process:
+  step_one:
+    input: examples/test.csv
+    model: gemini-2.5-pro-preview-06-05
+    action: "Analyze this CSV file and list the key points."
+    output: examples/points1.txt
 
-step_two:
-  input: examples/test.csv
-  model: claude-3-5-sonnet-20241022
-  action: "Analyze this CSV file and list the key points."
-  output: examples/points2.txt
+  step_two:
+    input: examples/test.csv
+    model: claude-sonnet-4-20250514
+    action: "Analyze this CSV file and list the key points."
+    output: examples/points2.txt
 
 step_three:
   input:
     - examples/points1.txt
     - examples/points2.txt
-  model: gpt-4o
+  model: gpt-4.1-2025-04-14
   action: "Compare these two analyses and determine which one is more thorough. Grade each analysis (A-F)."
   output: examples/comparison.txt
+  batch_mode: "combined"

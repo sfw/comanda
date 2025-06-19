@@ -31,18 +31,19 @@ type ProcessStepConfig struct {
 
 // Processor handles the DSL processing pipeline
 type Processor struct {
-	config       *DSLConfig
-	envConfig    *config.EnvConfig
-	serverConfig *config.ServerConfig // Add server config
-	handler      *input.Handler
-	validator    *input.Validator
-	providers    map[string]models.Provider
-	verbose      bool
-	lastOutput   string
-	spinner      *Spinner
-	variables    map[string]string // Store variables from STDIN
-	progress     ProgressWriter    // Progress writer for streaming updates
-	runtimeDir   string            // Runtime directory for file operations
+	config        *DSLConfig
+	envConfig     *config.EnvConfig
+	serverConfig  *config.ServerConfig // Add server config
+	handler       *input.Handler
+	validator     *input.Validator
+	providers     map[string]models.Provider
+	providerMutex sync.RWMutex // Protect providers map from concurrent access
+	verbose       bool
+	lastOutput    string
+	spinner       *Spinner
+	variables     map[string]string // Store variables from STDIN
+	progress      ProgressWriter    // Progress writer for streaming updates
+	runtimeDir    string            // Runtime directory for file operations
 }
 
 // isTestMode checks if the code is running in test mode
@@ -419,7 +420,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Validation failed for step '%s': %v", step.Name, err)
 			p.debugf("Step validation error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("validation error: %w", err)
 		}
 
@@ -448,7 +449,7 @@ func (p *Processor) Process() error {
 				p.spinner.Stop()
 				errMsg := fmt.Sprintf("Validation failed for parallel step '%s': %v", step.Name, err)
 				p.debugf("Parallel step validation error: %s", errMsg)
-				p.emitError(fmt.Errorf(errMsg))
+				p.emitError(fmt.Errorf("%s", errMsg))
 				return fmt.Errorf("validation error: %w", err)
 			}
 
@@ -471,7 +472,7 @@ func (p *Processor) Process() error {
 		p.spinner.Stop()
 		errMsg := fmt.Sprintf("Dependency validation failed: %v", err)
 		p.debugf("Dependency validation error: %s", errMsg)
-		p.emitError(fmt.Errorf(errMsg))
+		p.emitError(fmt.Errorf("%s", errMsg))
 		return fmt.Errorf("dependency validation error: %w", err)
 	}
 
@@ -585,7 +586,7 @@ func (p *Processor) Process() error {
 			p.spinner.Stop()
 			errMsg := fmt.Sprintf("Error processing step '%s': %v", step.Name, err)
 			p.debugf("Step processing error: %s", errMsg)
-			p.emitError(fmt.Errorf(errMsg))
+			p.emitError(fmt.Errorf("%s", errMsg))
 			return fmt.Errorf("step processing error: %w", err)
 		}
 

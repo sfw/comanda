@@ -206,11 +206,6 @@ func TestParallelDependencyValidation(t *testing.T) {
 	}
 }
 
-// Store the original validateModel function
-var validateModel = func(p *Processor, modelNames []string, inputs []string) error {
-	return p.validateModel(modelNames, inputs)
-}
-
 // TestParallelExecution tests that steps are actually executed in parallel
 func TestParallelExecution(t *testing.T) {
 	// Skip this test for now as it requires more complex setup
